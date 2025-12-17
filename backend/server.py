@@ -139,7 +139,7 @@ class TrafficEvent(Base):
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     page_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     referrer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON stored as text
+    event_metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON stored as text
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class VerificationCode(Base):
