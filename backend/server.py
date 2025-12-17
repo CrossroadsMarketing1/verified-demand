@@ -33,8 +33,13 @@ logger = logging.getLogger(__name__)
 # Database URL from environment
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Safe startup logging - never print actual value
+logger.info(f"=== BACKEND STARTUP ENVIRONMENT CHECK ===")
+logger.info(f"DATABASE_URL detected: {DATABASE_URL is not None and len(DATABASE_URL) > 0}")
+logger.info(f"Environment keys available: {[k for k in os.environ.keys() if 'DATABASE' in k.upper() or 'POSTGRES' in k.upper() or 'SUPABASE' in k.upper()]}")
+
 if DATABASE_URL:
-    logger.info("DATABASE_URL detected - connecting to PostgreSQL")
+    logger.info("DATABASE_URL is set - connecting to PostgreSQL")
     # Convert postgres:// to postgresql+asyncpg:// for async support
     if DATABASE_URL.startswith("postgres://"):
         DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
