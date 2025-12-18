@@ -797,37 +797,35 @@ const LeadsPage = () => {
   const [leads, setLeads] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState("all");
-  const fetchedRef = useRef(false);
+  const errorShownRef = useRef(false);
 
   useEffect(() => {
-    // Reset fetch flag when filter changes
-    fetchedRef.current = false;
-  }, [filter]);
-
-  useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-
-    const controller = new AbortController();
+    let isMounted = true;
     
     const fetchLeads = async () => {
       setIsLoading(true);
       try {
         const params = filter === "verified" ? "?is_verified=true" : filter === "unverified" ? "?is_verified=false" : "";
-        const res = await apiFetch(`/leads${params}`, { method: "GET", signal: controller.signal });
-        setLeads(res.data);
-      } catch (e) {
-        if (e.name !== 'AbortError' && e.name !== 'CanceledError') {
-          console.error(e);
-          toast.error("Failed to load leads", "load_leads");
+        const res = await apiFetch(`/leads${params}`, { method: "GET" });
+        if (isMounted) {
+          setLeads(res.data);
+          setIsLoading(false);
+          errorShownRef.current = false;
         }
-      } finally {
-        setIsLoading(false);
+      } catch (e) {
+        if (isMounted) {
+          console.error(e);
+          setIsLoading(false);
+          if (!errorShownRef.current) {
+            errorShownRef.current = true;
+            toast.error("Failed to load leads", "load_leads");
+          }
+        }
       }
     };
     
     fetchLeads();
-    return () => controller.abort();
+    return () => { isMounted = false; };
   }, [apiFetch, toast, filter]);
 
   const exportLeads = async () => {
