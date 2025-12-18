@@ -169,7 +169,12 @@ async def init_db():
     global engine, async_session_maker
     if DATABASE_URL:
         try:
-            engine = create_async_engine(DATABASE_URL, echo=False)
+            # For asyncpg, use ssl='require' in connect_args
+            engine = create_async_engine(
+                DATABASE_URL, 
+                echo=False,
+                connect_args={"ssl": "require"}
+            )
             async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
             
             # Create all tables
