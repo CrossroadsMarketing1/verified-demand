@@ -901,36 +901,38 @@ const AnalyticsPage = () => {
   const [geography, setGeography] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const fetchedRef = useRef(false);
+  const errorShownRef = useRef(false);
 
   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-
-    const controller = new AbortController();
+    let isMounted = true;
     
     const fetchData = async () => {
       try {
         const [srcRes, geoRes, campRes] = await Promise.all([
-          apiFetch("/analytics/sources", { method: "GET", signal: controller.signal }),
-          apiFetch("/analytics/geography", { method: "GET", signal: controller.signal }),
-          apiFetch("/analytics/utm-campaigns", { method: "GET", signal: controller.signal })
+          apiFetch("/analytics/sources", { method: "GET" }),
+          apiFetch("/analytics/geography", { method: "GET" }),
+          apiFetch("/analytics/utm-campaigns", { method: "GET" })
         ]);
-        setSources(srcRes.data);
-        setGeography(geoRes.data);
-        setCampaigns(campRes.data);
-      } catch (e) {
-        if (e.name !== 'AbortError' && e.name !== 'CanceledError') {
-          console.error(e);
-          toast.error("Failed to load analytics", "load_analytics");
+        if (isMounted) {
+          setSources(srcRes.data);
+          setGeography(geoRes.data);
+          setCampaigns(campRes.data);
+          setIsLoading(false);
         }
-      } finally {
-        setIsLoading(false);
+      } catch (e) {
+        if (isMounted) {
+          console.error(e);
+          setIsLoading(false);
+          if (!errorShownRef.current) {
+            errorShownRef.current = true;
+            toast.error("Failed to load analytics", "load_analytics");
+          }
+        }
       }
     };
     
     fetchData();
-    return () => controller.abort();
+    return () => { isMounted = false; };
   }, [apiFetch, toast]);
 
   if (isLoading) return <div className="loading">Loading...</div>;
