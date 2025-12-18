@@ -5,6 +5,47 @@ import axios from "axios";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+// Toast Context for notifications
+const ToastContext = createContext(null);
+
+const useToast = () => {
+  const context = useContext(ToastContext);
+  if (!context) throw new Error("useToast must be used within ToastProvider");
+  return context;
+};
+
+const ToastProvider = ({ children }) => {
+  const [toasts, setToasts] = useState([]);
+
+  const addToast = (message, type = "success") => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  };
+
+  const success = (message) => addToast(message, "success");
+  const error = (message) => addToast(message, "error");
+  const info = (message) => addToast(message, "info");
+
+  return (
+    <ToastContext.Provider value={{ success, error, info }}>
+      {children}
+      <div className="toast-container">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`toast toast-${toast.type}`}>
+            {toast.type === "success" && "✓ "}
+            {toast.type === "error" && "✗ "}
+            {toast.type === "info" && "ℹ "}
+            {toast.message}
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+};
+
 // Auth Context
 const AuthContext = createContext(null);
 
@@ -233,6 +274,26 @@ const ForgotPasswordForm = ({ onBackToLogin }) => {
   );
 };
 
+// ============== Confirmation Dialog ==============
+const ConfirmDialog = ({ isOpen, title, message, confirmLabel, onConfirm, onCancel, isDestructive }) => {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="modal-overlay">
+      <div className="modal confirm-dialog">
+        <h3>{title}</h3>
+        <p className="confirm-message">{message}</p>
+        <div className="modal-actions">
+          <button className="btn-secondary" onClick={onCancel}>Cancel</button>
+          <button className={isDestructive ? "btn-danger" : "btn-primary"} onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ============== Dashboard Components ==============
 const Sidebar = ({ currentPage, setCurrentPage }) => {
   const { logout, user } = useAuth();
@@ -341,12 +402,23 @@ const OverviewPage = () => {
   );
 };
 
+// ============== OFFERS PAGE WITH EDIT/DELETE ==============
 const OffersPage = () => {
   const { api } = useAuth();
+  const toast = useToast();
   const [offers, setOffers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [newOffer, setNewOffer] = useState({ title: "", description: "", discount_percent: "" });
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedOffer, setSelectedOffer] = useState(null);
+  const [formData, setFormData] = useState({ 
+    title: "", 
+    description: "", 
+    discount_percent: "",
+    discount_code: "",
+    is_active: true
+  });
 
   const fetchOffers = useCallback(async () => {
     try {
@@ -354,36 +426,88 @@ const OffersPage = () => {
       setOffers(res.data);
     } catch (e) {
       console.error(e);
+      toast.error("Failed to load offers");
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, toast]);
 
   useEffect(() => {
     fetchOffers();
   }, [fetchOffers]);
 
+  const resetForm = () => {
+    setFormData({ title: "", description: "", discount_percent: "", discount_code: "", is_active: true });
+  };
+
+  // CREATE
   const createOffer = async () => {
     try {
       await api.post("/offers", {
-        title: newOffer.title,
-        description: newOffer.description,
-        discount_percent: newOffer.discount_percent ? parseFloat(newOffer.discount_percent) : null
+        title: formData.title,
+        description: formData.description,
+        discount_percent: formData.discount_percent ? parseFloat(formData.discount_percent) : null,
+        discount_code: formData.discount_code || undefined
       });
-      setShowModal(false);
-      setNewOffer({ title: "", description: "", discount_percent: "" });
-      fetchOffers();
+      setShowCreateModal(false);
+      resetForm();
+      await fetchOffers();
+      toast.success("Offer created successfully");
     } catch (e) {
-      alert("Error creating offer");
+      toast.error("Error creating offer");
     }
   };
 
-  const toggleOffer = async (offer) => {
+  // EDIT
+  const openEditModal = (offer) => {
+    setSelectedOffer(offer);
+    setFormData({
+      title: offer.title || "",
+      description: offer.description || "",
+      discount_percent: offer.discount_percent ? String(offer.discount_percent) : "",
+      discount_code: offer.discount_code || "",
+      is_active: offer.is_active
+    });
+    setShowEditModal(true);
+  };
+
+  const updateOffer = async () => {
+    if (!selectedOffer) return;
     try {
-      await api.put(`/offers/${offer.id}`, { is_active: !offer.is_active });
-      fetchOffers();
+      await api.put(`/offers/${selectedOffer.id}`, {
+        title: formData.title,
+        description: formData.description,
+        discount_percent: formData.discount_percent ? parseFloat(formData.discount_percent) : null,
+        is_active: formData.is_active
+        // Note: discount_code is typically immutable after creation
+      });
+      setShowEditModal(false);
+      setSelectedOffer(null);
+      resetForm();
+      await fetchOffers();
+      toast.success("Offer updated successfully");
     } catch (e) {
-      alert("Error updating offer");
+      toast.error("Error updating offer");
+    }
+  };
+
+  // DELETE
+  const openDeleteConfirm = (offer) => {
+    setSelectedOffer(offer);
+    setShowDeleteConfirm(true);
+  };
+
+  const deleteOffer = async () => {
+    if (!selectedOffer) return;
+    try {
+      await api.delete(`/offers/${selectedOffer.id}`);
+      setShowDeleteConfirm(false);
+      // Immediately remove from list
+      setOffers(prev => prev.filter(o => o.id !== selectedOffer.id));
+      setSelectedOffer(null);
+      toast.success("Offer deleted successfully");
+    } catch (e) {
+      toast.error("Error deleting offer");
     }
   };
 
@@ -393,8 +517,9 @@ const OffersPage = () => {
     <div className="page" data-testid="offers-page">
       <div className="page-header">
         <h2>Offers</h2>
-        <button className="btn-primary" onClick={() => setShowModal(true)}>+ New Offer</button>
+        <button className="btn-primary" onClick={() => { resetForm(); setShowCreateModal(true); }}>+ New Offer</button>
       </div>
+      
       {offers.length === 0 ? (
         <div className="empty-state-box">
           <h3>No offers yet</h3>
@@ -403,7 +528,7 @@ const OffersPage = () => {
       ) : (
         <div className="offers-grid">
           {offers.map(offer => (
-            <div key={offer.id} className={`offer-card ${!offer.is_active ? "inactive" : ""}`}>
+            <div key={offer.id} className={`offer-card ${!offer.is_active ? "inactive" : ""}`} data-testid={`offer-card-${offer.id}`}>
               <div className="offer-header">
                 <h3>{offer.title}</h3>
                 <span className={`status-badge ${offer.is_active ? "active" : "inactive"}`}>
@@ -411,49 +536,160 @@ const OffersPage = () => {
                 </span>
               </div>
               <p className="offer-description">{offer.description}</p>
-              {offer.discount_percent && <div className="offer-discount">{offer.discount_percent}% off</div>}
+              {offer.discount_percent && (
+                <div className="offer-discount">{offer.discount_percent}% off</div>
+              )}
               <div className="offer-stats">
-                <span>Code: {offer.discount_code}</span>
+                <span>Code: <code>{offer.discount_code}</code></span>
                 <span>Redeemed: {offer.current_redemptions}/{offer.max_redemptions || "∞"}</span>
               </div>
               <div className="offer-actions">
-                <button className="btn-secondary" onClick={() => toggleOffer(offer)}>
-                  {offer.is_active ? "Deactivate" : "Activate"}
+                <button className="btn-secondary" onClick={() => openEditModal(offer)} data-testid={`edit-offer-${offer.id}`}>
+                  Edit
+                </button>
+                <button className="btn-danger-outline" onClick={() => openDeleteConfirm(offer)} data-testid={`delete-offer-${offer.id}`}>
+                  Delete
                 </button>
               </div>
             </div>
           ))}
         </div>
       )}
-      {showModal && (
+
+      {/* Create Modal */}
+      {showCreateModal && (
         <div className="modal-overlay">
           <div className="modal">
             <h3>Create New Offer</h3>
             <div className="form-group">
-              <label>Title</label>
-              <input type="text" value={newOffer.title} onChange={(e) => setNewOffer({ ...newOffer, title: e.target.value })} placeholder="e.g., Early Bird Special" />
+              <label>Title *</label>
+              <input 
+                type="text" 
+                value={formData.title} 
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })} 
+                placeholder="e.g., Early Bird Special" 
+              />
             </div>
             <div className="form-group">
               <label>Description</label>
-              <textarea value={newOffer.description} onChange={(e) => setNewOffer({ ...newOffer, description: e.target.value })} placeholder="Describe your offer..." />
+              <textarea 
+                value={formData.description} 
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
+                placeholder="Describe your offer..." 
+              />
             </div>
-            <div className="form-group">
-              <label>Discount Percent</label>
-              <input type="number" value={newOffer.discount_percent} onChange={(e) => setNewOffer({ ...newOffer, discount_percent: e.target.value })} placeholder="e.g., 20" />
+            <div className="form-row">
+              <div className="form-group">
+                <label>Discount Percent</label>
+                <input 
+                  type="number" 
+                  value={formData.discount_percent} 
+                  onChange={(e) => setFormData({ ...formData, discount_percent: e.target.value })} 
+                  placeholder="e.g., 20" 
+                  min="0"
+                  max="100"
+                />
+              </div>
+              <div className="form-group">
+                <label>Discount Code (optional)</label>
+                <input 
+                  type="text" 
+                  value={formData.discount_code} 
+                  onChange={(e) => setFormData({ ...formData, discount_code: e.target.value.toUpperCase() })} 
+                  placeholder="e.g., SAVE20" 
+                />
+                <small className="form-hint">Auto-generated if left blank</small>
+              </div>
             </div>
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn-primary" onClick={createOffer}>Create Offer</button>
+              <button className="btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
+              <button className="btn-primary" onClick={createOffer} disabled={!formData.title}>Create Offer</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Edit Modal */}
+      {showEditModal && selectedOffer && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3>Edit Offer</h3>
+            <div className="form-group">
+              <label>Title *</label>
+              <input 
+                type="text" 
+                value={formData.title} 
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })} 
+                placeholder="e.g., Early Bird Special" 
+              />
+            </div>
+            <div className="form-group">
+              <label>Description</label>
+              <textarea 
+                value={formData.description} 
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
+                placeholder="Describe your offer..." 
+              />
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Discount Percent</label>
+                <input 
+                  type="number" 
+                  value={formData.discount_percent} 
+                  onChange={(e) => setFormData({ ...formData, discount_percent: e.target.value })} 
+                  placeholder="e.g., 20" 
+                  min="0"
+                  max="100"
+                />
+              </div>
+              <div className="form-group">
+                <label>Discount Code</label>
+                <input 
+                  type="text" 
+                  value={formData.discount_code} 
+                  readOnly
+                  className="input-readonly"
+                />
+                <small className="form-hint">Code cannot be changed after creation</small>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="toggle-label">
+                <input 
+                  type="checkbox" 
+                  checked={formData.is_active} 
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })} 
+                />
+                <span className="toggle-text">Active</span>
+              </label>
+              <small className="form-hint">Inactive offers won't be shown on your website</small>
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => { setShowEditModal(false); setSelectedOffer(null); }}>Cancel</button>
+              <button className="btn-primary" onClick={updateOffer} disabled={!formData.title}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete Offer"
+        message={`Are you sure you want to delete "${selectedOffer?.title}"? This will deactivate the offer and hide it from your website.`}
+        confirmLabel="Delete"
+        onConfirm={deleteOffer}
+        onCancel={() => { setShowDeleteConfirm(false); setSelectedOffer(null); }}
+        isDestructive={true}
+      />
     </div>
   );
 };
 
 const LeadsPage = () => {
   const { api } = useAuth();
+  const toast = useToast();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -483,8 +719,9 @@ const LeadsPage = () => {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      toast.success("Leads exported successfully");
     } catch (e) {
-      alert("Error exporting leads");
+      toast.error("Error exporting leads");
     }
   };
 
@@ -618,22 +855,28 @@ const AnalyticsPage = () => {
   );
 };
 
+// ============== SETTINGS PAGE WITH SYSTEM STATUS ==============
 const SettingsPage = () => {
   const { api } = useAuth();
+  const toast = useToast();
   const [business, setBusiness] = useState(null);
   const [offers, setOffers] = useState([]);
+  const [systemStatus, setSystemStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [bizRes, offersRes] = await Promise.all([
+        const [bizRes, offersRes, statusRes] = await Promise.all([
           api.get("/settings/business"),
-          api.get("/offers")
+          api.get("/offers"),
+          api.get("/settings/status").catch(() => ({ data: null }))
         ]);
         setBusiness(bizRes.data);
         setOffers(offersRes.data.filter(o => o.is_active));
+        setSystemStatus(statusRes.data);
       } catch (e) {
         console.error(e);
       } finally {
@@ -647,29 +890,79 @@ const SettingsPage = () => {
     setGenerating(true);
     try {
       await api.post("/demo/generate");
-      alert("Demo data generated! Refresh to see the data.");
-      window.location.reload();
+      toast.success("Demo data generated! Refreshing...");
+      setTimeout(() => window.location.reload(), 1000);
     } catch (e) {
-      alert("Error generating demo data");
+      toast.error("Error generating demo data");
     } finally {
       setGenerating(false);
     }
   };
 
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopySuccess(true);
+      toast.success("Copied to clipboard");
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (e) {
+      // Fallback for preview environments where clipboard may be blocked
+      toast.info("Please select and copy the code manually");
+    }
+  };
+
   if (loading) return <div className="loading">Loading...</div>;
 
-  const embedSnippet = `<script 
+  const selectedOfferId = offers[0]?.id || 'YOUR_OFFER_ID';
+
+  const embedSnippet = `<!-- Verified Demand Embed Script -->
+<script 
   src="${BACKEND_URL}/api/embed.js" 
   data-public-key="${business?.public_key}" 
-  data-offer-id="${offers[0]?.id || 'YOUR_OFFER_ID'}">
-</script>
+  data-offer-id="${selectedOfferId}"
+  data-debug="false">
+</script>`;
 
-<!-- Add this to any element to trigger the modal -->
-<button data-vd-trigger>Get Your Offer</button>`;
+  const triggerExample = `<!-- Add data-vd-trigger to any element to open the modal -->
+<button data-vd-trigger>Get Your Offer</button>
+
+<!-- Works on any element -->
+<a href="#" data-vd-trigger>View Pricing</a>
+<div data-vd-trigger class="cta-banner">Click for discount</div>`;
+
+  // Detect environment
+  const isPreview = window.location.hostname.includes('preview.emergentagent.com');
 
   return (
     <div className="page" data-testid="settings-page">
       <h2>Settings</h2>
+      
+      {/* System Status */}
+      <div className="settings-section">
+        <h3>System Status</h3>
+        <div className="status-grid">
+          <div className="status-item">
+            <span className="status-label">Database</span>
+            <span className={`status-value ${systemStatus?.database === 'healthy' ? 'status-ok' : 'status-warning'}`}>
+              {systemStatus?.database === 'healthy' ? '● Connected' : '○ Not connected'}
+            </span>
+          </div>
+          <div className="status-item">
+            <span className="status-label">Twilio (OTP)</span>
+            <span className={`status-value ${systemStatus?.twilio ? 'status-ok' : 'status-warning'}`}>
+              {systemStatus?.twilio ? '● Configured' : '○ Not configured (mock mode)'}
+            </span>
+          </div>
+          <div className="status-item">
+            <span className="status-label">Environment</span>
+            <span className={`status-value ${isPreview ? 'status-warning' : 'status-ok'}`}>
+              {isPreview ? '○ Preview' : '● Deployed'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Business Info */}
       <div className="settings-section">
         <h3>Business Info</h3>
         <div className="setting-item">
@@ -681,12 +974,51 @@ const SettingsPage = () => {
           <div className="setting-value code">{business?.public_key}</div>
         </div>
       </div>
+
+      {/* Embed Script */}
       <div className="settings-section">
         <h3>Embed Script</h3>
-        <p className="section-description">Add this script to your website to enable lead capture. The modal opens when users click any element with <code>data-vd-trigger</code>.</p>
-        <pre className="code-block">{embedSnippet}</pre>
-        <button className="btn-secondary" onClick={() => navigator.clipboard.writeText(embedSnippet)}>Copy to Clipboard</button>
+        <p className="section-description">
+          Add this script to your website to enable lead capture. Place it before the closing <code>&lt;/body&gt;</code> tag.
+        </p>
+        
+        <div className="embed-step">
+          <div className="step-number">1</div>
+          <div className="step-content">
+            <h4>Add the script tag</h4>
+            <pre className="code-block">{embedSnippet}</pre>
+            <button 
+              className={`btn-secondary ${copySuccess ? 'btn-success' : ''}`} 
+              onClick={() => copyToClipboard(embedSnippet)}
+            >
+              {copySuccess ? '✓ Copied!' : 'Copy Script'}
+            </button>
+          </div>
+        </div>
+
+        <div className="embed-step">
+          <div className="step-number">2</div>
+          <div className="step-content">
+            <h4>Add trigger elements</h4>
+            <p className="step-description">Add <code>data-vd-trigger</code> to any element that should open the offer modal:</p>
+            <pre className="code-block">{triggerExample}</pre>
+          </div>
+        </div>
+
+        {offers.length === 0 && (
+          <div className="embed-warning">
+            ⚠️ You don't have any active offers. Create an offer first to use the embed.
+          </div>
+        )}
+
+        {offers.length > 1 && (
+          <div className="embed-info">
+            ℹ️ Using offer "{offers[0]?.title}". To use a different offer, replace the <code>data-offer-id</code> value with the desired offer ID.
+          </div>
+        )}
       </div>
+
+      {/* Demo Data */}
       <div className="settings-section">
         <h3>Demo Data</h3>
         <p className="section-description">Generate sample data to test the dashboard features.</p>
@@ -725,9 +1057,11 @@ function App() {
   const [view, setView] = useState("login");
 
   return (
-    <AuthProvider>
-      <AppContent view={view} setView={setView} />
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <AppContent view={view} setView={setView} />
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 
