@@ -1040,7 +1040,7 @@ async def serve_embed_js_api():
     return get_embed_script()
 
 def get_embed_script():
-    embed_script = """
+    return """
 (function() {
     const VD = {
         config: {},
