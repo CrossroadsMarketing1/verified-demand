@@ -765,6 +765,40 @@ async def update_business_settings(name: str = None, description: str = None, cu
     await session.refresh(business)
     return BusinessSettingsResponse.model_validate(business)
 
+@api_router.get("/settings/status")
+async def get_system_status(current_user: User = Depends(get_current_user)):
+    """Get system status for deployment readiness check"""
+    # Check database
+    db_status = "not_connected"
+    if DATABASE_URL and async_session_maker:
+        try:
+            async with async_session_maker() as session:
+                await session.execute(text("SELECT 1"))
+                db_status = "healthy"
+        except Exception:
+            db_status = "error"
+    
+    # Check Twilio configuration (without exposing secrets)
+    twilio_configured = bool(
+        os.getenv("TWILIO_ACCOUNT_SID") and 
+        os.getenv("TWILIO_AUTH_TOKEN") and 
+        os.getenv("TWILIO_PHONE_NUMBER")
+    )
+    
+    # Check OTP mock mode
+    otp_mock_mode = os.getenv("OTP_MOCK_MODE", "true").lower() == "true"
+    
+    # Detect environment
+    app_url = os.getenv("APP_URL", "")
+    is_preview = "preview.emergentagent.com" in app_url
+    
+    return {
+        "database": db_status,
+        "twilio": twilio_configured,
+        "otp_mock_mode": otp_mock_mode,
+        "environment": "preview" if is_preview else "deployed"
+    }
+
 # ============== Public Routes ==============
 @api_router.post("/public/track")
 async def public_track(data: TrackEventRequest, session: AsyncSession = Depends(get_db_session)):
