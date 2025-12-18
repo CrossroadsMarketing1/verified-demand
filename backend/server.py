@@ -1264,6 +1264,7 @@ def get_embed_script():
         },
         
         sendOTP: function(email) {
+            var self = this;
             fetch(this.config.apiUrl + '/api/public/verify/send-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1271,15 +1272,17 @@ def get_embed_script():
                     public_key: this.config.publicKey,
                     email: email
                 })
-            }).then(r => r.json()).then(d => {
+            }).then(function(r) { return r.json(); }).then(function(d) {
                 document.getElementById('vd-form').style.display = 'none';
                 document.getElementById('vd-verify').style.display = 'block';
+                self.log('OTP sent');
             });
         },
         
         verifyCode: function() {
-            const code = document.getElementById('vd-code').value;
-            const errorEl = document.getElementById('vd-error');
+            var self = this;
+            var code = document.getElementById('vd-code').value;
+            var errorEl = document.getElementById('vd-error');
             
             fetch(this.config.apiUrl + '/api/public/verify/confirm-otp', {
                 method: 'POST',
@@ -1290,16 +1293,17 @@ def get_embed_script():
                     code: code,
                     offer_id: this.config.offerId
                 })
-            }).then(r => r.json()).then(d => {
+            }).then(function(r) { return r.json(); }).then(function(d) {
                 if (d.verified) {
                     document.getElementById('vd-verify').style.display = 'none';
                     document.getElementById('vd-success').style.display = 'block';
                     document.getElementById('vd-discount-code').textContent = d.discount_code || 'Check your email!';
+                    self.log('Verification successful');
                 } else {
                     errorEl.textContent = 'Invalid code. Please try again.';
                     errorEl.style.display = 'block';
                 }
-            }).catch(e => {
+            }).catch(function(e) {
                 errorEl.textContent = 'Verification failed. Please try again.';
                 errorEl.style.display = 'block';
             });
@@ -1307,14 +1311,20 @@ def get_embed_script():
     };
     
     // Auto-init from script tag attributes
-    const script = document.currentScript || document.querySelector('script[data-public-key]');
+    var script = document.currentScript || document.querySelector('script[data-public-key]');
     if (script) {
-        const publicKey = script.getAttribute('data-public-key');
-        const offerId = script.getAttribute('data-offer-id');
-        const apiUrl = script.src.replace('/api/embed.js', '').replace('/embed.js', '');
+        var publicKey = script.getAttribute('data-public-key');
+        var offerId = script.getAttribute('data-offer-id');
+        var debugMode = script.getAttribute('data-debug');
+        var apiUrl = script.src.replace('/api/embed.js', '').replace('/embed.js', '');
         
         if (publicKey) {
-            VD.init({ publicKey, offerId, apiUrl });
+            VD.init({ 
+                publicKey: publicKey, 
+                offerId: offerId, 
+                apiUrl: apiUrl,
+                debug: debugMode === 'true'
+            });
         }
     }
     
