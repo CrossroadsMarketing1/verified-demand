@@ -1205,7 +1205,7 @@ def get_embed_script():
     if (script) {
         const publicKey = script.getAttribute('data-public-key');
         const offerId = script.getAttribute('data-offer-id');
-        const apiUrl = script.src.replace('/embed.js', '');
+        const apiUrl = script.src.replace('/api/embed.js', '').replace('/embed.js', '');
         
         if (publicKey) {
             VD.init({ publicKey, offerId, apiUrl });
