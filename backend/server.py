@@ -46,9 +46,12 @@ if DATABASE_URL:
     elif DATABASE_URL.startswith("postgresql://"):
         DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
     
-    # Ensure SSL mode is set
-    if "sslmode" not in DATABASE_URL:
-        DATABASE_URL += "?sslmode=require" if "?" not in DATABASE_URL else "&sslmode=require"
+    # Remove sslmode parameter if present (asyncpg handles SSL differently)
+    if "sslmode=" in DATABASE_URL:
+        import re
+        DATABASE_URL = re.sub(r'[?&]sslmode=[^&]*', '', DATABASE_URL)
+        # Clean up any trailing ? or &
+        DATABASE_URL = DATABASE_URL.rstrip('?&')
 else:
     logger.warning("DATABASE_URL not found - database features will be unavailable")
     DATABASE_URL = None
