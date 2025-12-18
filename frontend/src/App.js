@@ -659,7 +659,7 @@ const SettingsPage = () => {
   if (loading) return <div className="loading">Loading...</div>;
 
   const embedSnippet = `<script 
-  src="${BACKEND_URL}/embed.js" 
+  src="${BACKEND_URL}/api/embed.js" 
   data-public-key="${business?.public_key}" 
   data-offer-id="${offers[0]?.id || 'YOUR_OFFER_ID'}">
 </script>
