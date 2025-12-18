@@ -372,34 +372,36 @@ const OverviewPage = () => {
   const [stats, setStats] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const fetchedRef = useRef(false);
+  const errorShownRef = useRef(false);
 
   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-
-    const controller = new AbortController();
+    let isMounted = true;
     
     const fetchData = async () => {
       try {
         const [statsRes, activityRes] = await Promise.all([
-          apiFetch("/analytics/overview", { method: "GET", signal: controller.signal }),
-          apiFetch("/analytics/recent-activity?limit=10", { method: "GET", signal: controller.signal })
+          apiFetch("/analytics/overview", { method: "GET" }),
+          apiFetch("/analytics/recent-activity?limit=10", { method: "GET" })
         ]);
-        setStats(statsRes.data);
-        setRecentActivity(activityRes.data);
-      } catch (e) {
-        if (e.name !== 'AbortError' && e.name !== 'CanceledError') {
-          console.error(e);
-          toast.error("Failed to load overview", "load_overview");
+        if (isMounted) {
+          setStats(statsRes.data);
+          setRecentActivity(activityRes.data);
+          setIsLoading(false);
         }
-      } finally {
-        setIsLoading(false);
+      } catch (e) {
+        if (isMounted) {
+          console.error(e);
+          setIsLoading(false);
+          if (!errorShownRef.current) {
+            errorShownRef.current = true;
+            toast.error("Failed to load overview", "load_overview");
+          }
+        }
       }
     };
     
     fetchData();
-    return () => controller.abort();
+    return () => { isMounted = false; };
   }, [apiFetch, toast]);
 
   if (isLoading) return <div className="loading">Loading...</div>;
