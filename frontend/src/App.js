@@ -1,11 +1,11 @@
-import { useState, useEffect, createContext, useContext, useCallback } from "react";
+import { useState, useEffect, createContext, useContext, useCallback, useRef } from "react";
 import "@/App.css";
 import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// Toast Context for notifications
+// ============== Toast Context with Deduplication ==============
 const ToastContext = createContext(null);
 
 const useToast = () => {
@@ -16,21 +16,34 @@ const useToast = () => {
 
 const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
+  const lastToastRef = useRef({});
 
-  const addToast = (message, type = "success") => {
-    const id = Date.now();
+  const addToast = useCallback((message, type = "success", key = null) => {
+    // Deduplicate: if same key shown in last 3 seconds, skip
+    const toastKey = key || `${type}_${message}`;
+    const now = Date.now();
+    if (lastToastRef.current[toastKey] && now - lastToastRef.current[toastKey] < 3000) {
+      return; // Skip duplicate
+    }
+    lastToastRef.current[toastKey] = now;
+
+    const id = now;
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
-  };
+  }, []);
 
-  const success = (message) => addToast(message, "success");
-  const error = (message) => addToast(message, "error");
-  const info = (message) => addToast(message, "info");
+  const success = useCallback((message, key) => addToast(message, "success", key), [addToast]);
+  const error = useCallback((message, key) => addToast(message, "error", key), [addToast]);
+  const info = useCallback((message, key) => addToast(message, "info", key), [addToast]);
+
+  const clearDuplicateKey = useCallback((key) => {
+    delete lastToastRef.current[key];
+  }, []);
 
   return (
-    <ToastContext.Provider value={{ success, error, info }}>
+    <ToastContext.Provider value={{ success, error, info, clearDuplicateKey }}>
       {children}
       <div className="toast-container">
         {toasts.map(toast => (
@@ -46,7 +59,7 @@ const ToastProvider = ({ children }) => {
   );
 };
 
-// Auth Context
+// ============== Auth Context with API Helper ==============
 const AuthContext = createContext(null);
 
 const useAuth = () => {
@@ -60,23 +73,52 @@ const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [loading, setLoading] = useState(true);
 
+  // Create stable API instance
+  const apiFetch = useCallback(async (endpoint, options = {}) => {
+    const currentToken = localStorage.getItem("token");
+    const config = {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
+        ...options.headers,
+      },
+    };
+
+    try {
+      const response = await axios({
+        url: `${API}${endpoint}`,
+        ...config,
+      });
+      return response;
+    } catch (err) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        // Session expired
+        localStorage.removeItem("token");
+        setToken(null);
+        setUser(null);
+      }
+      throw err;
+    }
+  }, []);
+
   const fetchUser = useCallback(async () => {
-    if (!token) {
+    const currentToken = localStorage.getItem("token");
+    if (!currentToken) {
       setLoading(false);
       return;
     }
     try {
-      const response = await axios.get(`${API}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await apiFetch("/auth/me", { method: "GET" });
       setUser(response.data);
     } catch (e) {
       localStorage.removeItem("token");
       setToken(null);
+      setUser(null);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [apiFetch]);
 
   useEffect(() => {
     fetchUser();
@@ -84,39 +126,37 @@ const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const response = await axios.post(`${API}/auth/login`, { email, password });
-    const { access_token, user } = response.data;
+    const { access_token, user: userData } = response.data;
     localStorage.setItem("token", access_token);
     setToken(access_token);
-    setUser(user);
-    return user;
+    setUser(userData);
+    return userData;
   };
 
   const register = async (email, password, firstName, lastName) => {
     const response = await axios.post(`${API}/auth/register`, {
       email, password, first_name: firstName, last_name: lastName
     });
-    const { access_token, user } = response.data;
+    const { access_token, user: userData } = response.data;
     localStorage.setItem("token", access_token);
     setToken(access_token);
-    setUser(user);
-    return user;
+    setUser(userData);
+    return userData;
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem("token");
     setToken(null);
     setUser(null);
-  };
+  }, []);
 
   const resetPassword = async (email) => {
     const response = await axios.post(`${API}/auth/reset-password`, { email });
     return response.data;
   };
 
-  const api = axios.create({ baseURL: API, headers: { Authorization: `Bearer ${token}` } });
-
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, resetPassword, api }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, resetPassword, apiFetch }}>
       {children}
     </AuthContext.Provider>
   );
@@ -128,18 +168,18 @@ const LoginForm = ({ onSwitchToRegister, onForgotPassword }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setIsLoading(true);
     try {
       await login(email, password);
     } catch (err) {
       setError(err.response?.data?.detail || "Login failed");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -161,8 +201,8 @@ const LoginForm = ({ onSwitchToRegister, onForgotPassword }) => {
             </div>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" data-testid="login-password" />
           </div>
-          <button type="submit" className="btn-primary" disabled={loading} data-testid="login-submit">
-            {loading ? "Signing in..." : "Sign in"}
+          <button type="submit" className="btn-primary" disabled={isLoading} data-testid="login-submit">
+            {isLoading ? "Signing in..." : "Sign in"}
           </button>
         </form>
         <p className="auth-footer">
@@ -180,18 +220,18 @@ const RegisterForm = ({ onSwitchToLogin }) => {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setIsLoading(true);
     try {
       await register(email, password, firstName, lastName);
     } catch (err) {
       setError(err.response?.data?.detail || "Registration failed");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -220,8 +260,8 @@ const RegisterForm = ({ onSwitchToLogin }) => {
             <label>Password</label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} placeholder="At least 8 characters" data-testid="register-password" />
           </div>
-          <button type="submit" className="btn-primary" disabled={loading} data-testid="register-submit">
-            {loading ? "Creating account..." : "Create account"}
+          <button type="submit" className="btn-primary" disabled={isLoading} data-testid="register-submit">
+            {isLoading ? "Creating account..." : "Create account"}
           </button>
         </form>
         <p className="auth-footer">
@@ -236,18 +276,18 @@ const ForgotPasswordForm = ({ onBackToLogin }) => {
   const { resetPassword } = useAuth();
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setIsLoading(true);
     try {
       const result = await resetPassword(email);
       setMessage(result.message);
     } catch (err) {
       setMessage("Error sending reset email");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -262,8 +302,8 @@ const ForgotPasswordForm = ({ onBackToLogin }) => {
             <label>Email address</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
           </div>
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? "Sending..." : "Send reset link"}
+          <button type="submit" className="btn-primary" disabled={isLoading}>
+            {isLoading ? "Sending..." : "Send reset link"}
           </button>
         </form>
         <p className="auth-footer">
@@ -279,8 +319,8 @@ const ConfirmDialog = ({ isOpen, title, message, confirmLabel, onConfirm, onCanc
   if (!isOpen) return null;
   
   return (
-    <div className="modal-overlay">
-      <div className="modal confirm-dialog">
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal confirm-dialog" onClick={e => e.stopPropagation()}>
         <h3>{title}</h3>
         <p className="confirm-message">{message}</p>
         <div className="modal-actions">
@@ -327,30 +367,42 @@ const Sidebar = ({ currentPage, setCurrentPage }) => {
 };
 
 const OverviewPage = () => {
-  const { api } = useAuth();
+  const { apiFetch } = useAuth();
+  const toast = useToast();
   const [stats, setStats] = useState(null);
   const [recentActivity, setRecentActivity] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    const controller = new AbortController();
+    
     const fetchData = async () => {
       try {
         const [statsRes, activityRes] = await Promise.all([
-          api.get("/analytics/overview"),
-          api.get("/analytics/recent-activity?limit=10")
+          apiFetch("/analytics/overview", { method: "GET", signal: controller.signal }),
+          apiFetch("/analytics/recent-activity?limit=10", { method: "GET", signal: controller.signal })
         ]);
         setStats(statsRes.data);
         setRecentActivity(activityRes.data);
       } catch (e) {
-        console.error(e);
+        if (e.name !== 'AbortError' && e.name !== 'CanceledError') {
+          console.error(e);
+          toast.error("Failed to load overview", "load_overview");
+        }
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
+    
     fetchData();
-  }, [api]);
+    return () => controller.abort();
+  }, [apiFetch, toast]);
 
-  if (loading) return <div className="loading">Loading...</div>;
+  if (isLoading) return <div className="loading">Loading...</div>;
 
   return (
     <div className="page" data-testid="overview-page">
@@ -402,16 +454,17 @@ const OverviewPage = () => {
   );
 };
 
-// ============== OFFERS PAGE WITH EDIT/DELETE ==============
+// ============== OFFERS PAGE - FIXED ==============
 const OffersPage = () => {
-  const { api } = useAuth();
+  const { apiFetch } = useAuth();
   const toast = useToast();
   const [offers, setOffers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({ 
     title: "", 
     description: "", 
@@ -419,22 +472,52 @@ const OffersPage = () => {
     discount_code: "",
     is_active: true
   });
+  
+  // Use refs to prevent duplicate fetches and toast spam
+  const fetchedRef = useRef(false);
+  const loadErrorShownRef = useRef(false);
 
-  const fetchOffers = useCallback(async () => {
-    try {
-      const res = await api.get("/offers");
-      setOffers(res.data);
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to load offers");
-    } finally {
-      setLoading(false);
-    }
-  }, [api, toast]);
-
+  // Fetch offers - runs once on mount
   useEffect(() => {
-    fetchOffers();
-  }, [fetchOffers]);
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    const controller = new AbortController();
+    
+    const loadOffers = async () => {
+      try {
+        const res = await apiFetch("/offers", { method: "GET", signal: controller.signal });
+        setOffers(res.data);
+        loadErrorShownRef.current = false; // Reset error flag on success
+        toast.clearDuplicateKey("load_offers_error");
+      } catch (e) {
+        if (e.name !== 'AbortError' && e.name !== 'CanceledError') {
+          console.error("Failed to load offers:", e);
+          // Only show error toast once
+          if (!loadErrorShownRef.current) {
+            loadErrorShownRef.current = true;
+            toast.error("Failed to load offers", "load_offers_error");
+          }
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadOffers();
+    return () => controller.abort();
+  }, [apiFetch, toast]);
+
+  // Manual refresh function (for after create/edit/delete)
+  const refreshOffers = async () => {
+    try {
+      const res = await apiFetch("/offers", { method: "GET" });
+      setOffers(res.data);
+      loadErrorShownRef.current = false;
+    } catch (e) {
+      console.error("Failed to refresh offers:", e);
+    }
+  };
 
   const resetForm = () => {
     setFormData({ title: "", description: "", discount_percent: "", discount_code: "", is_active: true });
@@ -442,19 +525,26 @@ const OffersPage = () => {
 
   // CREATE
   const createOffer = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
-      await api.post("/offers", {
-        title: formData.title,
-        description: formData.description,
-        discount_percent: formData.discount_percent ? parseFloat(formData.discount_percent) : null,
-        discount_code: formData.discount_code || undefined
+      await apiFetch("/offers", {
+        method: "POST",
+        data: {
+          title: formData.title,
+          description: formData.description,
+          discount_percent: formData.discount_percent ? parseFloat(formData.discount_percent) : null,
+          discount_code: formData.discount_code || undefined
+        }
       });
       setShowCreateModal(false);
       resetForm();
-      await fetchOffers();
+      await refreshOffers();
       toast.success("Offer created successfully");
     } catch (e) {
       toast.error("Error creating offer");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -472,22 +562,27 @@ const OffersPage = () => {
   };
 
   const updateOffer = async () => {
-    if (!selectedOffer) return;
+    if (!selectedOffer || isSaving) return;
+    setIsSaving(true);
     try {
-      await api.put(`/offers/${selectedOffer.id}`, {
-        title: formData.title,
-        description: formData.description,
-        discount_percent: formData.discount_percent ? parseFloat(formData.discount_percent) : null,
-        is_active: formData.is_active
-        // Note: discount_code is typically immutable after creation
+      await apiFetch(`/offers/${selectedOffer.id}`, {
+        method: "PUT",
+        data: {
+          title: formData.title,
+          description: formData.description,
+          discount_percent: formData.discount_percent ? parseFloat(formData.discount_percent) : null,
+          is_active: formData.is_active
+        }
       });
       setShowEditModal(false);
       setSelectedOffer(null);
       resetForm();
-      await fetchOffers();
+      await refreshOffers();
       toast.success("Offer updated successfully");
     } catch (e) {
       toast.error("Error updating offer");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -498,20 +593,23 @@ const OffersPage = () => {
   };
 
   const deleteOffer = async () => {
-    if (!selectedOffer) return;
+    if (!selectedOffer || isSaving) return;
+    setIsSaving(true);
     try {
-      await api.delete(`/offers/${selectedOffer.id}`);
+      await apiFetch(`/offers/${selectedOffer.id}`, { method: "DELETE" });
       setShowDeleteConfirm(false);
-      // Immediately remove from list
+      // Immediately remove from list (optimistic update)
       setOffers(prev => prev.filter(o => o.id !== selectedOffer.id));
       setSelectedOffer(null);
       toast.success("Offer deleted successfully");
     } catch (e) {
       toast.error("Error deleting offer");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  if (loading) return <div className="loading">Loading...</div>;
+  if (isLoading) return <div className="loading">Loading...</div>;
 
   return (
     <div className="page" data-testid="offers-page">
@@ -558,8 +656,8 @@ const OffersPage = () => {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="modal-overlay">
-          <div className="modal">
+        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Create New Offer</h3>
             <div className="form-group">
               <label>Title *</label>
@@ -603,7 +701,9 @@ const OffersPage = () => {
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
-              <button className="btn-primary" onClick={createOffer} disabled={!formData.title}>Create Offer</button>
+              <button className="btn-primary" onClick={createOffer} disabled={!formData.title || isSaving}>
+                {isSaving ? "Creating..." : "Create Offer"}
+              </button>
             </div>
           </div>
         </div>
@@ -611,8 +711,8 @@ const OffersPage = () => {
 
       {/* Edit Modal */}
       {showEditModal && selectedOffer && (
-        <div className="modal-overlay">
-          <div className="modal">
+        <div className="modal-overlay" onClick={() => { setShowEditModal(false); setSelectedOffer(null); }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Edit Offer</h3>
             <div className="form-group">
               <label>Title *</label>
@@ -667,7 +767,9 @@ const OffersPage = () => {
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => { setShowEditModal(false); setSelectedOffer(null); }}>Cancel</button>
-              <button className="btn-primary" onClick={updateOffer} disabled={!formData.title}>Save Changes</button>
+              <button className="btn-primary" onClick={updateOffer} disabled={!formData.title || isSaving}>
+                {isSaving ? "Saving..." : "Save Changes"}
+              </button>
             </div>
           </div>
         </div>
@@ -678,7 +780,7 @@ const OffersPage = () => {
         isOpen={showDeleteConfirm}
         title="Delete Offer"
         message={`Are you sure you want to delete "${selectedOffer?.title}"? This will deactivate the offer and hide it from your website.`}
-        confirmLabel="Delete"
+        confirmLabel={isSaving ? "Deleting..." : "Delete"}
         onConfirm={deleteOffer}
         onCancel={() => { setShowDeleteConfirm(false); setSelectedOffer(null); }}
         isDestructive={true}
@@ -688,30 +790,47 @@ const OffersPage = () => {
 };
 
 const LeadsPage = () => {
-  const { api } = useAuth();
+  const { apiFetch } = useAuth();
   const toast = useToast();
   const [leads, setLeads] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    // Reset fetch flag when filter changes
+    fetchedRef.current = false;
+  }, [filter]);
+
+  useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    const controller = new AbortController();
+    
     const fetchLeads = async () => {
+      setIsLoading(true);
       try {
         const params = filter === "verified" ? "?is_verified=true" : filter === "unverified" ? "?is_verified=false" : "";
-        const res = await api.get(`/leads${params}`);
+        const res = await apiFetch(`/leads${params}`, { method: "GET", signal: controller.signal });
         setLeads(res.data);
       } catch (e) {
-        console.error(e);
+        if (e.name !== 'AbortError' && e.name !== 'CanceledError') {
+          console.error(e);
+          toast.error("Failed to load leads", "load_leads");
+        }
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
+    
     fetchLeads();
-  }, [api, filter]);
+    return () => controller.abort();
+  }, [apiFetch, toast, filter]);
 
   const exportLeads = async () => {
     try {
-      const res = await api.get("/leads/export", { responseType: "blob" });
+      const res = await apiFetch("/leads/export", { method: "GET", responseType: "blob" });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
       link.href = url;
@@ -725,7 +844,7 @@ const LeadsPage = () => {
     }
   };
 
-  if (loading) return <div className="loading">Loading...</div>;
+  if (isLoading) return <div className="loading">Loading...</div>;
 
   return (
     <div className="page" data-testid="leads-page">
@@ -776,33 +895,45 @@ const LeadsPage = () => {
 };
 
 const AnalyticsPage = () => {
-  const { api } = useAuth();
+  const { apiFetch } = useAuth();
+  const toast = useToast();
   const [sources, setSources] = useState([]);
   const [geography, setGeography] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    const controller = new AbortController();
+    
     const fetchData = async () => {
       try {
         const [srcRes, geoRes, campRes] = await Promise.all([
-          api.get("/analytics/sources"),
-          api.get("/analytics/geography"),
-          api.get("/analytics/utm-campaigns")
+          apiFetch("/analytics/sources", { method: "GET", signal: controller.signal }),
+          apiFetch("/analytics/geography", { method: "GET", signal: controller.signal }),
+          apiFetch("/analytics/utm-campaigns", { method: "GET", signal: controller.signal })
         ]);
         setSources(srcRes.data);
         setGeography(geoRes.data);
         setCampaigns(campRes.data);
       } catch (e) {
-        console.error(e);
+        if (e.name !== 'AbortError' && e.name !== 'CanceledError') {
+          console.error(e);
+          toast.error("Failed to load analytics", "load_analytics");
+        }
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
+    
     fetchData();
-  }, [api]);
+    return () => controller.abort();
+  }, [apiFetch, toast]);
 
-  if (loading) return <div className="loading">Loading...</div>;
+  if (isLoading) return <div className="loading">Loading...</div>;
 
   return (
     <div className="page" data-testid="analytics-page">
@@ -855,41 +986,51 @@ const AnalyticsPage = () => {
   );
 };
 
-// ============== SETTINGS PAGE WITH SYSTEM STATUS ==============
 const SettingsPage = () => {
-  const { api } = useAuth();
+  const { apiFetch } = useAuth();
   const toast = useToast();
   const [business, setBusiness] = useState(null);
   const [offers, setOffers] = useState([]);
   const [systemStatus, setSystemStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    const controller = new AbortController();
+    
     const fetchData = async () => {
       try {
         const [bizRes, offersRes, statusRes] = await Promise.all([
-          api.get("/settings/business"),
-          api.get("/offers"),
-          api.get("/settings/status").catch(() => ({ data: null }))
+          apiFetch("/settings/business", { method: "GET", signal: controller.signal }),
+          apiFetch("/offers", { method: "GET", signal: controller.signal }),
+          apiFetch("/settings/status", { method: "GET", signal: controller.signal }).catch(() => ({ data: null }))
         ]);
         setBusiness(bizRes.data);
         setOffers(offersRes.data.filter(o => o.is_active));
         setSystemStatus(statusRes.data);
       } catch (e) {
-        console.error(e);
+        if (e.name !== 'AbortError' && e.name !== 'CanceledError') {
+          console.error(e);
+          toast.error("Failed to load settings", "load_settings");
+        }
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
+    
     fetchData();
-  }, [api]);
+    return () => controller.abort();
+  }, [apiFetch, toast]);
 
   const generateDemoData = async () => {
     setGenerating(true);
     try {
-      await api.post("/demo/generate");
+      await apiFetch("/demo/generate", { method: "POST" });
       toast.success("Demo data generated! Refreshing...");
       setTimeout(() => window.location.reload(), 1000);
     } catch (e) {
@@ -906,12 +1047,11 @@ const SettingsPage = () => {
       toast.success("Copied to clipboard");
       setTimeout(() => setCopySuccess(false), 2000);
     } catch (e) {
-      // Fallback for preview environments where clipboard may be blocked
       toast.info("Please select and copy the code manually");
     }
   };
 
-  if (loading) return <div className="loading">Loading...</div>;
+  if (isLoading) return <div className="loading">Loading...</div>;
 
   const selectedOfferId = offers[0]?.id || 'YOUR_OFFER_ID';
 
@@ -930,7 +1070,6 @@ const SettingsPage = () => {
 <a href="#" data-vd-trigger>View Pricing</a>
 <div data-vd-trigger class="cta-banner">Click for discount</div>`;
 
-  // Detect environment
   const isPreview = window.location.hostname.includes('preview.emergentagent.com');
 
   return (
