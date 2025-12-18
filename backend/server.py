@@ -1030,8 +1030,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve embed.js
+# Serve embed.js (both with and without /api prefix)
 @app.get("/embed.js", response_class=PlainTextResponse)
+@api_router.get("/embed.js", response_class=PlainTextResponse)
 async def serve_embed_js():
     embed_script = """
 (function() {
