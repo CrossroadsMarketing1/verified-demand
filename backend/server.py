@@ -1180,11 +1180,16 @@ def get_embed_script():
         },
         
         openModal: function() {
-            if (document.getElementById('vd-modal')) return;
+            if (document.getElementById('vd-modal')) {
+                this.log('Modal already open');
+                return;
+            }
             
-            const modal = document.createElement('div');
+            this.log('Modal opened');
+            var self = this;
+            var modal = document.createElement('div');
             modal.id = 'vd-modal';
-            modal.innerHTML = `
+            modal.innerHTML = '
                 <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:10000;">
                     <div style="background:white;padding:30px;border-radius:12px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
                         <h2 style="margin:0 0 10px;font-size:24px;">Claim Your Offer</h2>
