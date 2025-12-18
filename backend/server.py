@@ -1131,27 +1131,52 @@ def get_embed_script():
                     event_type: eventType,
                     page_url: window.location.pathname,
                     referrer: document.referrer,
-                    ...utm,
-                    ...data
+                    utm_source: utm.utm_source,
+                    utm_medium: utm.utm_medium,
+                    utm_campaign: utm.utm_campaign,
+                    device_type: data ? data.device_type : null,
+                    browser: data ? data.browser : null
                 })
-            }).then(r => r.json()).then(d => {
-                if (d.visitor_id) this.visitorId = d.visitor_id;
-            }).catch(console.error);
+            }).then(function(r) { return r.json(); }).then(function(d) {
+                if (d.visitor_id) self.visitorId = d.visitor_id;
+                self.log('Track sent ok: ' + eventType);
+            }).catch(function(err) {
+                self.log('Track failed: ' + eventType);
+            });
         },
         
         trackPageView: function() {
+            var isMobile = /Mobile|Android|iPhone/i.test(navigator.userAgent);
+            var browser = 'Other';
+            if (navigator.userAgent.indexOf('Chrome') > -1) browser = 'Chrome';
+            else if (navigator.userAgent.indexOf('Firefox') > -1) browser = 'Firefox';
+            else if (navigator.userAgent.indexOf('Safari') > -1) browser = 'Safari';
+            
             this.track('pageview', {
-                device_type: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-                browser: navigator.userAgent.includes('Chrome') ? 'Chrome' : 
-                         navigator.userAgent.includes('Firefox') ? 'Firefox' : 
-                         navigator.userAgent.includes('Safari') ? 'Safari' : 'Other'
+                device_type: isMobile ? 'mobile' : 'desktop',
+                browser: browser
             });
         },
         
         setupTriggers: function() {
-            document.querySelectorAll('[data-vd-trigger]').forEach(el => {
-                el.addEventListener('click', () => this.openModal());
-            });
+            var self = this;
+            
+            // Use event delegation for better reliability with dynamic content
+            document.addEventListener('click', function(e) {
+                var target = e.target;
+                // Check if clicked element or any parent has data-vd-trigger
+                while (target && target !== document) {
+                    if (target.hasAttribute && target.hasAttribute('data-vd-trigger')) {
+                        e.preventDefault();
+                        self.log('Trigger clicked');
+                        self.openModal();
+                        return;
+                    }
+                    target = target.parentNode;
+                }
+            }, true);
+            
+            this.log('Triggers setup complete');
         },
         
         openModal: function() {
