@@ -580,9 +580,17 @@ async def create_offer(offer_data: OfferCreate, current_user: User = Depends(get
     return OfferResponse.model_validate(offer)
 
 @api_router.get("/offers", response_model=List[OfferResponse])
-async def get_offers(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
+async def get_offers(
+    current_user: User = Depends(get_current_user), 
+    session: AsyncSession = Depends(get_db_session),
+    include_inactive: bool = Query(default=False, description="Include inactive/deleted offers")
+):
     business = await get_or_create_business(current_user, session)
-    result = await session.execute(select(Offer).where(Offer.business_id == business.id).order_by(desc(Offer.created_at)))
+    query = select(Offer).where(Offer.business_id == business.id)
+    if not include_inactive:
+        query = query.where(Offer.is_active == True)
+    query = query.order_by(desc(Offer.created_at))
+    result = await session.execute(query)
     return [OfferResponse.model_validate(o) for o in result.scalars().all()]
 
 @api_router.get("/offers/{offer_id}", response_model=OfferResponse)
