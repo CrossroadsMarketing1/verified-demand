@@ -1019,26 +1019,7 @@ async def generate_demo_data(current_user: User = Depends(get_current_user), ses
     await session.commit()
     return {"success": True, "message": "Demo data generated: 3 offers, 20 visitors, 20 leads, 150 traffic events"}
 
-# Include router and middleware
-app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Serve embed.js
-@app.get("/embed.js", response_class=PlainTextResponse)
-async def serve_embed_js():
-    return get_embed_script()
-
-@api_router.get("/embed.js", response_class=PlainTextResponse)
-async def serve_embed_js_api():
-    return get_embed_script()
-
+# ============== Embed Script ==============
 def get_embed_script():
     return """
 (function() {
