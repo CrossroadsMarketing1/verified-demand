@@ -1057,38 +1057,71 @@ async def generate_demo_data(current_user: User = Depends(get_current_user), ses
 def get_embed_script():
     return """
 (function() {
-    const VD = {
+    'use strict';
+    
+    var VD = {
         config: {},
         visitorId: null,
         sessionId: null,
+        debug: false,
+        initialized: false,
+        
+        log: function(msg) {
+            if (this.debug && typeof console !== 'undefined') {
+                console.log('[VD] ' + msg);
+            }
+        },
         
         init: function(options) {
+            if (this.initialized) {
+                this.log('Already initialized');
+                return;
+            }
+            
             this.config = options || {};
+            this.debug = this.config.debug === true || this.config.debug === 'true';
+            
+            this.log('VD embed loaded');
+            this.log('Public key: ' + (this.config.publicKey ? this.config.publicKey.substring(0, 8) + '...' : 'not set'));
+            
             this.sessionId = this.getOrCreateSessionId();
             this.trackPageView();
             this.setupTriggers();
+            this.initialized = true;
         },
         
         getOrCreateSessionId: function() {
-            let sid = sessionStorage.getItem('vd_session_id');
-            if (!sid) {
+            var sid;
+            try {
+                sid = sessionStorage.getItem('vd_session_id');
+                if (!sid) {
+                    sid = 'vd_' + Math.random().toString(36).substr(2, 9);
+                    sessionStorage.setItem('vd_session_id', sid);
+                }
+            } catch (e) {
+                // sessionStorage may be blocked in some environments
                 sid = 'vd_' + Math.random().toString(36).substr(2, 9);
-                sessionStorage.setItem('vd_session_id', sid);
             }
             return sid;
         },
         
         getUTMParams: function() {
-            const params = new URLSearchParams(window.location.search);
-            return {
-                utm_source: params.get('utm_source'),
-                utm_medium: params.get('utm_medium'),
-                utm_campaign: params.get('utm_campaign')
-            };
+            try {
+                var params = new URLSearchParams(window.location.search);
+                return {
+                    utm_source: params.get('utm_source'),
+                    utm_medium: params.get('utm_medium'),
+                    utm_campaign: params.get('utm_campaign')
+                };
+            } catch (e) {
+                return { utm_source: null, utm_medium: null, utm_campaign: null };
+            }
         },
         
         track: function(eventType, data) {
-            const utm = this.getUTMParams();
+            var self = this;
+            var utm = this.getUTMParams();
+            
             fetch(this.config.apiUrl + '/api/public/track', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
