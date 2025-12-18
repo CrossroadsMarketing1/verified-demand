@@ -1215,3 +1215,23 @@ def get_embed_script():
     window.VerifiedDemand = VD;
 })();
 """
+
+@api_router.get("/embed.js", response_class=PlainTextResponse)
+async def serve_embed_js_api():
+    return get_embed_script()
+
+# Include router and middleware
+app.include_router(api_router)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Serve embed.js (root level)
+@app.get("/embed.js", response_class=PlainTextResponse)
+async def serve_embed_js():
+    return get_embed_script()
