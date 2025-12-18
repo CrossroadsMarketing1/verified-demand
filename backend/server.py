@@ -185,9 +185,80 @@ async def init_db():
         try:
             engine = create_async_engine(DATABASE_URL, echo=False, connect_args={"ssl": "require"})
             async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+            
+            # Create tables
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-            logger.info("Database tables created/verified successfully")
+            
+            # Run migrations for new columns
+            async with async_session_maker() as session:
+                # Add missing columns to businesses table
+                try:
+                    await session.execute(text("ALTER TABLE businesses ADD COLUMN IF NOT EXISTS public_key VARCHAR(64)"))
+                    await session.execute(text("UPDATE businesses SET public_key = encode(gen_random_bytes(16), 'hex') WHERE public_key IS NULL"))
+                    await session.commit()
+                except Exception as e:
+                    logger.warning(f"Migration note: {e}")
+                    await session.rollback()
+                
+                # Add missing columns to leads table
+                try:
+                    await session.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS offer_id VARCHAR(36)"))
+                    await session.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS visitor_id VARCHAR(36)"))
+                    await session.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_source VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_medium VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE"))
+                    await session.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS verification_code VARCHAR(10)"))
+                    await session.execute(text("ALTER TABLE leads ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMP WITH TIME ZONE"))
+                    await session.commit()
+                except Exception as e:
+                    logger.warning(f"Migration note: {e}")
+                    await session.rollback()
+                
+                # Add missing columns to visitors table
+                try:
+                    await session.execute(text("ALTER TABLE visitors ADD COLUMN IF NOT EXISTS country VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE visitors ADD COLUMN IF NOT EXISTS city VARCHAR(100)"))
+                    await session.commit()
+                except Exception as e:
+                    logger.warning(f"Migration note: {e}")
+                    await session.rollback()
+                
+                # Add missing columns to offers table
+                try:
+                    await session.execute(text("ALTER TABLE offers ADD COLUMN IF NOT EXISTS discount_code VARCHAR(50)"))
+                    await session.execute(text("ALTER TABLE offers ADD COLUMN IF NOT EXISTS max_redemptions INTEGER"))
+                    await session.execute(text("ALTER TABLE offers ADD COLUMN IF NOT EXISTS current_redemptions INTEGER DEFAULT 0"))
+                    await session.commit()
+                except Exception as e:
+                    logger.warning(f"Migration note: {e}")
+                    await session.rollback()
+                
+                # Add missing columns to traffic_events table
+                try:
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS utm_source VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS utm_medium VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS country VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS city VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS device_type VARCHAR(50)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS browser VARCHAR(50)"))
+                    await session.commit()
+                except Exception as e:
+                    logger.warning(f"Migration note: {e}")
+                    await session.rollback()
+                
+                # Add/update verification_codes table columns
+                try:
+                    await session.execute(text("ALTER TABLE verification_codes ADD COLUMN IF NOT EXISTS email VARCHAR(255)"))
+                    await session.execute(text("ALTER TABLE verification_codes ADD COLUMN IF NOT EXISTS business_id VARCHAR(36)"))
+                    await session.commit()
+                except Exception as e:
+                    logger.warning(f"Migration note: {e}")
+                    await session.rollback()
+            
+            logger.info("Database tables and migrations completed successfully")
         except Exception as e:
             logger.error(f"Database initialization error: {str(e)}")
             raise
