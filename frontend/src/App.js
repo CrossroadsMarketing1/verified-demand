@@ -473,39 +473,39 @@ const OffersPage = () => {
     is_active: true
   });
   
-  // Use refs to prevent duplicate fetches and toast spam
-  const fetchedRef = useRef(false);
+  // Ref to track if error toast was shown (to prevent spam)
   const loadErrorShownRef = useRef(false);
 
-  // Fetch offers - runs once on mount
+  // Fetch offers on mount
   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-
-    const controller = new AbortController();
+    let isMounted = true;
     
     const loadOffers = async () => {
       try {
-        const res = await apiFetch("/offers", { method: "GET", signal: controller.signal });
-        setOffers(res.data);
-        loadErrorShownRef.current = false; // Reset error flag on success
-        toast.clearDuplicateKey("load_offers_error");
+        const res = await apiFetch("/offers", { method: "GET" });
+        if (isMounted) {
+          setOffers(res.data);
+          setIsLoading(false);
+          loadErrorShownRef.current = false;
+        }
       } catch (e) {
-        if (e.name !== 'AbortError' && e.name !== 'CanceledError') {
+        if (isMounted) {
           console.error("Failed to load offers:", e);
-          // Only show error toast once
+          setIsLoading(false);
+          // Only show error toast once per mount
           if (!loadErrorShownRef.current) {
             loadErrorShownRef.current = true;
             toast.error("Failed to load offers", "load_offers_error");
           }
         }
-      } finally {
-        setIsLoading(false);
       }
     };
     
     loadOffers();
-    return () => controller.abort();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [apiFetch, toast]);
 
   // Manual refresh function (for after create/edit/delete)
