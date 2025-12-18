@@ -997,36 +997,38 @@ const SettingsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
-  const fetchedRef = useRef(false);
+  const errorShownRef = useRef(false);
 
   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-
-    const controller = new AbortController();
+    let isMounted = true;
     
     const fetchData = async () => {
       try {
         const [bizRes, offersRes, statusRes] = await Promise.all([
-          apiFetch("/settings/business", { method: "GET", signal: controller.signal }),
-          apiFetch("/offers", { method: "GET", signal: controller.signal }),
-          apiFetch("/settings/status", { method: "GET", signal: controller.signal }).catch(() => ({ data: null }))
+          apiFetch("/settings/business", { method: "GET" }),
+          apiFetch("/offers", { method: "GET" }),
+          apiFetch("/settings/status", { method: "GET" }).catch(() => ({ data: null }))
         ]);
-        setBusiness(bizRes.data);
-        setOffers(offersRes.data.filter(o => o.is_active));
-        setSystemStatus(statusRes.data);
-      } catch (e) {
-        if (e.name !== 'AbortError' && e.name !== 'CanceledError') {
-          console.error(e);
-          toast.error("Failed to load settings", "load_settings");
+        if (isMounted) {
+          setBusiness(bizRes.data);
+          setOffers(offersRes.data.filter(o => o.is_active));
+          setSystemStatus(statusRes.data);
+          setIsLoading(false);
         }
-      } finally {
-        setIsLoading(false);
+      } catch (e) {
+        if (isMounted) {
+          console.error(e);
+          setIsLoading(false);
+          if (!errorShownRef.current) {
+            errorShownRef.current = true;
+            toast.error("Failed to load settings", "load_settings");
+          }
+        }
       }
     };
     
     fetchData();
-    return () => controller.abort();
+    return () => { isMounted = false; };
   }, [apiFetch, toast]);
 
   const generateDemoData = async () => {
