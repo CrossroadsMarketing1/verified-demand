@@ -1234,4 +1234,3 @@ def get_embed_script():
     window.VerifiedDemand = VD;
 })();
 """
-    return embed_script
