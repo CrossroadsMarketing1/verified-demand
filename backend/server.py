@@ -1212,18 +1212,25 @@ def get_embed_script():
                         <p id="vd-error" style="color:red;margin-top:10px;display:none;"></p>
                     </div>
                 </div>
-            `;
+            ';
             document.body.appendChild(modal);
             
-            document.getElementById('vd-close').onclick = () => modal.remove();
-            document.getElementById('vd-submit').onclick = () => this.submitLead();
-            document.getElementById('vd-verify-btn').onclick = () => this.verifyCode();
+            document.getElementById('vd-close').onclick = function() { 
+                modal.parentNode.removeChild(modal); 
+            };
+            document.getElementById('vd-submit').onclick = function() { 
+                self.submitLead(); 
+            };
+            document.getElementById('vd-verify-btn').onclick = function() { 
+                self.verifyCode(); 
+            };
         },
         
         submitLead: function() {
-            const email = document.getElementById('vd-email').value;
-            const name = document.getElementById('vd-name').value;
-            const errorEl = document.getElementById('vd-error');
+            var self = this;
+            var email = document.getElementById('vd-email').value;
+            var name = document.getElementById('vd-name').value;
+            var errorEl = document.getElementById('vd-error');
             
             if (!email) {
                 errorEl.textContent = 'Please enter your email';
@@ -1231,7 +1238,7 @@ def get_embed_script():
                 return;
             }
             
-            const utm = this.getUTMParams();
+            var utm = this.getUTMParams();
             fetch(this.config.apiUrl + '/api/public/leads/capture', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1241,14 +1248,16 @@ def get_embed_script():
                     email: email,
                     name: name,
                     session_id: this.sessionId,
-                    ...utm
+                    utm_source: utm.utm_source,
+                    utm_medium: utm.utm_medium,
+                    utm_campaign: utm.utm_campaign
                 })
-            }).then(r => r.json()).then(d => {
+            }).then(function(r) { return r.json(); }).then(function(d) {
                 if (d.success) {
-                    this.leadEmail = email;
-                    this.sendOTP(email);
+                    self.leadEmail = email;
+                    self.sendOTP(email);
                 }
-            }).catch(e => {
+            }).catch(function(e) {
                 errorEl.textContent = 'Error submitting. Please try again.';
                 errorEl.style.display = 'block';
             });
