@@ -1046,6 +1046,11 @@ async def public_check_offer(offer_id: str, public_key: str, session: AsyncSessi
 # ============== Demo Data Generation ==============
 @api_router.post("/demo/generate")
 async def generate_demo_data(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
+    # Check if demo mode is enabled (disabled by default in production)
+    demo_enabled = os.getenv("DEMO_MODE_ENABLED", "false").lower() == "true"
+    if not demo_enabled:
+        raise HTTPException(status_code=403, detail="Demo data generation is disabled in production")
+    
     business = await get_or_create_business(current_user, session)
     
     # Create 3 offers
