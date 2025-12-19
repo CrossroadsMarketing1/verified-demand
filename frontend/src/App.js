@@ -1220,8 +1220,8 @@ const SettingsPage = () => {
           </div>
           <div className="status-item">
             <span className="status-label">Environment</span>
-            <span className={`status-value ${isPreview ? 'status-warning' : 'status-ok'}`}>
-              {isPreview ? '○ Preview' : '● Deployed'}
+            <span className={`status-value ${isProduction ? 'status-ok' : 'status-warning'}`}>
+              {isProduction ? '● Production' : isPreview ? '○ Preview' : '○ Development'}
             </span>
           </div>
         </div>
