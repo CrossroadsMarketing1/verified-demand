@@ -1181,7 +1181,7 @@ const SettingsPage = () => {
   const selectedOfferId = offers[0]?.id || 'YOUR_OFFER_ID';
   
   // Use production URL for embed instructions
-  const embedBaseUrl = isProduction ? 'https://app.verifieddemand.com' : BACKEND_URL;
+  const embedBaseUrl = isProduction ? 'https://verifieddemand.com' : BACKEND_URL;
 
   const embedSnippet = `<!-- Verified Demand Embed Script -->
 <script 
