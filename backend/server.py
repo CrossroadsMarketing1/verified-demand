@@ -807,6 +807,87 @@ async def get_system_status(current_user: User = Depends(get_current_user)):
         "environment": "preview" if is_preview else "deployed"
     }
 
+# ============== Debug Endpoint ==============
+@api_router.get("/debug/analytics")
+async def debug_analytics(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
+    """Debug endpoint to diagnose analytics data issues"""
+    business = await get_or_create_business(current_user, session)
+    
+    # Count visitors
+    visitors_result = await session.execute(
+        select(func.count(Visitor.id)).where(Visitor.business_id == business.id)
+    )
+    visitor_count = visitors_result.scalar() or 0
+    
+    # Count traffic_events
+    events_result = await session.execute(
+        select(func.count(TrafficEvent.id)).where(TrafficEvent.business_id == business.id)
+    )
+    traffic_count = events_result.scalar() or 0
+    
+    # Count leads
+    leads_result = await session.execute(
+        select(func.count(Lead.id)).where(Lead.business_id == business.id)
+    )
+    lead_count = leads_result.scalar() or 0
+    
+    # Get last 5 traffic events
+    recent_events_result = await session.execute(
+        select(TrafficEvent)
+        .where(TrafficEvent.business_id == business.id)
+        .order_by(desc(TrafficEvent.created_at))
+        .limit(5)
+    )
+    recent_events = recent_events_result.scalars().all()
+    
+    # Count events with utm_source populated
+    utm_source_result = await session.execute(
+        select(func.count(TrafficEvent.id))
+        .where(TrafficEvent.business_id == business.id, TrafficEvent.utm_source.isnot(None))
+    )
+    utm_source_count = utm_source_result.scalar() or 0
+    
+    # Count events with country populated
+    country_result = await session.execute(
+        select(func.count(TrafficEvent.id))
+        .where(TrafficEvent.business_id == business.id, TrafficEvent.country.isnot(None))
+    )
+    country_count = country_result.scalar() or 0
+    
+    return {
+        "business_id": business.id,
+        "public_key": business.public_key,
+        "counts": {
+            "visitors": visitor_count,
+            "traffic_events": traffic_count,
+            "leads": lead_count,
+            "events_with_utm_source": utm_source_count,
+            "events_with_country": country_count
+        },
+        "last_5_events": [
+            {
+                "id": e.id,
+                "event_type": e.event_type,
+                "page_url": e.page_url,
+                "utm_source": e.utm_source,
+                "utm_campaign": e.utm_campaign,
+                "country": e.country,
+                "created_at": e.created_at.isoformat() if e.created_at else None
+            }
+            for e in recent_events
+        ],
+        "diagnosis": {
+            "has_traffic_data": traffic_count > 0,
+            "has_utm_data": utm_source_count > 0,
+            "has_geo_data": country_count > 0,
+            "recommendation": (
+                "Generate demo data from Settings page" if traffic_count == 0 
+                else "Data exists - check frontend API calls" if (utm_source_count == 0 and country_count == 0)
+                else "All looks good - analytics should display"
+            )
+        }
+    }
+
 # ============== Public Routes ==============
 @api_router.post("/public/track")
 async def public_track(data: TrackEventRequest, session: AsyncSession = Depends(get_db_session)):
