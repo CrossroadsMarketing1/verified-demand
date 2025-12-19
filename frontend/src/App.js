@@ -950,7 +950,9 @@ const AnalyticsPage = () => {
     try {
       await apiFetch("/demo/generate", { method: "POST" });
       toast.success("Demo data generated! Refreshing...");
-      await fetchAnalytics();
+      if (fetchAnalyticsRef.current) {
+        await fetchAnalyticsRef.current();
+      }
     } catch (e) {
       toast.error("Error generating demo data");
     } finally {
