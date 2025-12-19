@@ -348,14 +348,11 @@ const Sidebar = ({ currentPage, setCurrentPage }) => {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <h1>
-          <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M16 2L28.124 9V23L16 30L3.876 23V9L16 2Z" fill="#00A896"/>
-            <path d="M16 8L10 20H13L14 17H18L19 20H22L16 8ZM15 15L16 12L17 15H15Z" fill="white"/>
-          </svg>
-          <span className="brand-verified">Verified</span>
-          <span className="brand-demand">Demand</span>
-        </h1>
+        <img 
+          src="/verified-demand-logo.png" 
+          alt="Verified Demand" 
+          className="sidebar-logo"
+        />
       </div>
       <nav className="sidebar-nav">
         {navItems.map(item => (
