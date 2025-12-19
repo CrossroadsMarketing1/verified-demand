@@ -905,8 +905,10 @@ const AnalyticsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const errorShownRef = useRef(false);
+  const fetchAnalyticsRef = useRef(null);
 
-  const fetchAnalytics = async () => {
+  // Memoize fetchAnalytics to avoid re-creating on each render
+  fetchAnalyticsRef.current = async () => {
     try {
       const [srcRes, geoRes, campRes, debugRes] = await Promise.all([
         apiFetch("/analytics/sources", { method: "GET" }),
@@ -934,8 +936,8 @@ const AnalyticsPage = () => {
     let isMounted = true;
     
     const fetchData = async () => {
-      if (isMounted) {
-        await fetchAnalytics();
+      if (isMounted && fetchAnalyticsRef.current) {
+        await fetchAnalyticsRef.current();
       }
     };
     
