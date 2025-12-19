@@ -1192,7 +1192,8 @@ const SettingsPage = () => {
 <a href="#" data-vd-trigger>View Pricing</a>
 <div data-vd-trigger class="cta-banner">Click for discount</div>`;
 
-  const isPreview = window.location.hostname.includes('preview.emergentagent.com');
+  const isPreview = window.location.hostname.includes('preview.emergentagent.com') || window.location.hostname === 'localhost';
+  const isProduction = window.location.hostname === 'app.verifieddemand.com';
 
   return (
     <div className="page" data-testid="settings-page">
