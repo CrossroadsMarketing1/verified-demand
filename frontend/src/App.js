@@ -900,34 +900,42 @@ const AnalyticsPage = () => {
   const [sources, setSources] = useState([]);
   const [geography, setGeography] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
+  const [debugInfo, setDebugInfo] = useState(null);
+  const [showDebug, setShowDebug] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const errorShownRef = useRef(false);
+
+  const fetchAnalytics = async () => {
+    try {
+      const [srcRes, geoRes, campRes, debugRes] = await Promise.all([
+        apiFetch("/analytics/sources", { method: "GET" }),
+        apiFetch("/analytics/geography", { method: "GET" }),
+        apiFetch("/analytics/utm-campaigns", { method: "GET" }),
+        apiFetch("/debug/analytics", { method: "GET" })
+      ]);
+      setSources(srcRes.data);
+      setGeography(geoRes.data);
+      setCampaigns(campRes.data);
+      setDebugInfo(debugRes.data);
+      setIsLoading(false);
+      errorShownRef.current = false;
+    } catch (e) {
+      console.error(e);
+      setIsLoading(false);
+      if (!errorShownRef.current) {
+        errorShownRef.current = true;
+        toast.error("Failed to load analytics", "load_analytics");
+      }
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
     
     const fetchData = async () => {
-      try {
-        const [srcRes, geoRes, campRes] = await Promise.all([
-          apiFetch("/analytics/sources", { method: "GET" }),
-          apiFetch("/analytics/geography", { method: "GET" }),
-          apiFetch("/analytics/utm-campaigns", { method: "GET" })
-        ]);
-        if (isMounted) {
-          setSources(srcRes.data);
-          setGeography(geoRes.data);
-          setCampaigns(campRes.data);
-          setIsLoading(false);
-        }
-      } catch (e) {
-        if (isMounted) {
-          console.error(e);
-          setIsLoading(false);
-          if (!errorShownRef.current) {
-            errorShownRef.current = true;
-            toast.error("Failed to load analytics", "load_analytics");
-          }
-        }
+      if (isMounted) {
+        await fetchAnalytics();
       }
     };
     
@@ -935,55 +943,157 @@ const AnalyticsPage = () => {
     return () => { isMounted = false; };
   }, [apiFetch, toast]);
 
+  const generateDemoData = async () => {
+    setGenerating(true);
+    try {
+      await apiFetch("/demo/generate", { method: "POST" });
+      toast.success("Demo data generated! Refreshing...");
+      await fetchAnalytics();
+    } catch (e) {
+      toast.error("Error generating demo data");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   if (isLoading) return <div className="loading">Loading...</div>;
+
+  const hasNoData = sources.length === 0 && geography.length === 0 && campaigns.length === 0;
 
   return (
     <div className="page" data-testid="analytics-page">
-      <h2>Analytics</h2>
-      <div className="analytics-grid">
-        <div className="analytics-card">
-          <h3>Traffic Sources</h3>
-          {sources.length === 0 ? <p className="empty-text">No data yet</p> : (
-            <div className="bar-list">
-              {sources.map(s => (
-                <div key={s.source} className="bar-item">
-                  <span className="bar-label">{s.source}</span>
-                  <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(100, s.count * 2)}%` }}></div></div>
-                  <span className="bar-value">{s.count}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="analytics-card">
-          <h3>Geography</h3>
-          {geography.length === 0 ? <p className="empty-text">No data yet</p> : (
-            <div className="bar-list">
-              {geography.map(g => (
-                <div key={g.country} className="bar-item">
-                  <span className="bar-label">{g.country}</span>
-                  <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(100, g.count * 2)}%` }}></div></div>
-                  <span className="bar-value">{g.count}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="analytics-card">
-          <h3>UTM Campaigns</h3>
-          {campaigns.length === 0 ? <p className="empty-text">No data yet</p> : (
-            <div className="bar-list">
-              {campaigns.map(c => (
-                <div key={c.campaign} className="bar-item">
-                  <span className="bar-label">{c.campaign}</span>
-                  <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(100, c.count * 2)}%` }}></div></div>
-                  <span className="bar-value">{c.count}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      <div className="page-header">
+        <h2>Analytics</h2>
+        <button className="btn-secondary" onClick={() => setShowDebug(!showDebug)}>
+          {showDebug ? "Hide Debug" : "Debug Info"}
+        </button>
       </div>
+      
+      {/* Debug Panel */}
+      {showDebug && debugInfo && (
+        <div className="debug-panel">
+          <h4>Analytics Debug Info</h4>
+          <div className="debug-grid">
+            <div className="debug-item">
+              <span className="debug-label">Business ID:</span>
+              <code>{debugInfo.business_id}</code>
+            </div>
+            <div className="debug-item">
+              <span className="debug-label">Public Key:</span>
+              <code>{debugInfo.public_key}</code>
+            </div>
+            <div className="debug-item">
+              <span className="debug-label">Visitors:</span>
+              <span className={debugInfo.counts.visitors > 0 ? "debug-ok" : "debug-warn"}>{debugInfo.counts.visitors}</span>
+            </div>
+            <div className="debug-item">
+              <span className="debug-label">Traffic Events:</span>
+              <span className={debugInfo.counts.traffic_events > 0 ? "debug-ok" : "debug-warn"}>{debugInfo.counts.traffic_events}</span>
+            </div>
+            <div className="debug-item">
+              <span className="debug-label">Leads:</span>
+              <span className={debugInfo.counts.leads > 0 ? "debug-ok" : "debug-warn"}>{debugInfo.counts.leads}</span>
+            </div>
+            <div className="debug-item">
+              <span className="debug-label">Events with UTM Source:</span>
+              <span>{debugInfo.counts.events_with_utm_source}</span>
+            </div>
+            <div className="debug-item">
+              <span className="debug-label">Events with Country:</span>
+              <span>{debugInfo.counts.events_with_country}</span>
+            </div>
+          </div>
+          {debugInfo.last_5_events.length > 0 && (
+            <div className="debug-events">
+              <h5>Last 5 Traffic Events:</h5>
+              <table className="debug-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Page</th>
+                    <th>UTM Source</th>
+                    <th>Country</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {debugInfo.last_5_events.map(e => (
+                    <tr key={e.id}>
+                      <td>{e.event_type}</td>
+                      <td>{e.page_url}</td>
+                      <td>{e.utm_source || "-"}</td>
+                      <td>{e.country || "-"}</td>
+                      <td>{new Date(e.created_at).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="debug-recommendation">
+            <strong>Diagnosis:</strong> {debugInfo.diagnosis.recommendation}
+          </div>
+        </div>
+      )}
+
+      {/* No Data State */}
+      {hasNoData && (
+        <div className="empty-state-box analytics-empty">
+          <h3>No analytics data yet</h3>
+          <p>Analytics will populate when visitors interact with your embedded offers, or you can generate demo data to preview the dashboard.</p>
+          <button className="btn-primary" onClick={generateDemoData} disabled={generating}>
+            {generating ? "Generating..." : "Generate Demo Data"}
+          </button>
+        </div>
+      )}
+
+      {/* Analytics Cards */}
+      {!hasNoData && (
+        <div className="analytics-grid">
+          <div className="analytics-card">
+            <h3>Traffic Sources</h3>
+            {sources.length === 0 ? <p className="empty-text">No data yet</p> : (
+              <div className="bar-list">
+                {sources.map(s => (
+                  <div key={s.source} className="bar-item">
+                    <span className="bar-label">{s.source}</span>
+                    <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(100, s.count * 2)}%` }}></div></div>
+                    <span className="bar-value">{s.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="analytics-card">
+            <h3>Geography</h3>
+            {geography.length === 0 ? <p className="empty-text">No data yet</p> : (
+              <div className="bar-list">
+                {geography.map(g => (
+                  <div key={g.country} className="bar-item">
+                    <span className="bar-label">{g.country}</span>
+                    <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(100, g.count * 2)}%` }}></div></div>
+                    <span className="bar-value">{g.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="analytics-card">
+            <h3>UTM Campaigns</h3>
+            {campaigns.length === 0 ? <p className="empty-text">No data yet</p> : (
+              <div className="bar-list">
+                {campaigns.map(c => (
+                  <div key={c.campaign} className="bar-item">
+                    <span className="bar-label">{c.campaign}</span>
+                    <div className="bar-track"><div className="bar-fill" style={{ width: `${Math.min(100, c.count * 2)}%` }}></div></div>
+                    <span className="bar-value">{c.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
