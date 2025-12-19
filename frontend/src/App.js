@@ -1175,6 +1175,9 @@ const SettingsPage = () => {
 
   if (isLoading) return <div className="loading">Loading...</div>;
 
+  const isPreview = window.location.hostname.includes('preview.emergentagent.com') || window.location.hostname === 'localhost';
+  const isProduction = window.location.hostname === 'app.verifieddemand.com';
+  
   const selectedOfferId = offers[0]?.id || 'YOUR_OFFER_ID';
   
   // Use production URL for embed instructions
@@ -1194,9 +1197,6 @@ const SettingsPage = () => {
 <!-- Works on any element -->
 <a href="#" data-vd-trigger>View Pricing</a>
 <div data-vd-trigger class="cta-banner">Click for discount</div>`;
-
-  const isPreview = window.location.hostname.includes('preview.emergentagent.com') || window.location.hostname === 'localhost';
-  const isProduction = window.location.hostname === 'app.verifieddemand.com';
 
   return (
     <div className="page" data-testid="settings-page">
