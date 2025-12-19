@@ -1176,7 +1176,7 @@ const SettingsPage = () => {
   if (isLoading) return <div className="loading">Loading...</div>;
 
   const isPreview = window.location.hostname.includes('preview.emergentagent.com') || window.location.hostname === 'localhost';
-  const isProduction = window.location.hostname === 'app.verifieddemand.com';
+  const isProduction = window.location.hostname === 'verifieddemand.com' || window.location.hostname === 'app.verifieddemand.com';
   
   const selectedOfferId = offers[0]?.id || 'YOUR_OFFER_ID';
   
