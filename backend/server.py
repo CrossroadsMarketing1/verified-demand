@@ -1478,15 +1478,8 @@ async def public_vehicle_lead(data: VehicleLeadRequest, session: AsyncSession = 
         status="new"
     )
     session.add(lead)
-        utm_campaign=data.utm_campaign,
-        zip_code=data.zip_code,
-        page_url=data.page_url,
-        status="new"
-    )
-    session.add(lead)
     
-    # Also track as lead_submit event
-    price_bucket = get_price_bucket(data.vehicle_price) if data.vehicle_price else None
+    # Also track as lead_submit event with normalized fields
     event = TrafficEvent(
         id=str(uuid.uuid4()),
         business_id=business.id,
@@ -1501,8 +1494,10 @@ async def public_vehicle_lead(data: VehicleLeadRequest, session: AsyncSession = 
         vehicle_model=data.vehicle_model,
         vehicle_trim=data.vehicle_trim,
         vehicle_price=data.vehicle_price,
+        vehicle_type=vehicle_type,
         price_bucket=price_bucket,
-        zip_code=data.zip_code
+        zip_code=data.zip_code,
+        source=source
     )
     session.add(event)
     
