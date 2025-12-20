@@ -437,6 +437,7 @@ class TrackEventRequest(BaseModel):
     vehicle_model: Optional[str] = None
     vehicle_trim: Optional[str] = None
     vehicle_price: Optional[int] = None
+    vehicle_type: Optional[str] = None  # SUV/Sedan/Truck/EV/Hybrid
     zip_code: Optional[str] = None
 
 class VehicleLeadRequest(BaseModel):
@@ -456,6 +457,7 @@ class VehicleLeadRequest(BaseModel):
     vehicle_model: Optional[str] = None
     vehicle_trim: Optional[str] = None
     vehicle_price: Optional[int] = None
+    vehicle_type: Optional[str] = None  # SUV/Sedan/Truck/EV/Hybrid
     vehicle_image: Optional[str] = None
     # Attribution
     utm_source: Optional[str] = None
