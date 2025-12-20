@@ -1548,3 +1548,24 @@ code {
     grid-template-columns: 80px 1fr 50px;
   }
 }
+
+/* Contact Method Badge */
+.contact-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.contact-badge.text {
+  background: #ECFDF5;
+  color: #047857;
+}
+.contact-badge.call {
+  background: #EFF6FF;
+  color: #1E3A8A;
+}
+.contact-badge.email {
+  background: #FEF3C7;
+  color: #92400E;
+}
