@@ -1264,6 +1264,21 @@ async def debug_analytics(current_user: User = Depends(get_current_user), sessio
     }
 
 # ============== Public Routes ==============
+def get_price_bucket(price):
+    """Categorize price into buckets"""
+    if not price:
+        return None
+    if price < 20000:
+        return "Under $20k"
+    elif price < 25000:
+        return "$20k-$25k"
+    elif price < 30000:
+        return "$25k-$30k"
+    elif price < 35000:
+        return "$30k-$35k"
+    else:
+        return "$35k+"
+
 @api_router.post("/public/track")
 async def public_track(data: TrackEventRequest, session: AsyncSession = Depends(get_db_session)):
     result = await session.execute(select(Business).where(Business.public_key == data.public_key))
@@ -1279,6 +1294,9 @@ async def public_track(data: TrackEventRequest, session: AsyncSession = Depends(
         session.add(visitor)
         await session.flush()
     
+    # Calculate price bucket
+    price_bucket = get_price_bucket(data.vehicle_price) if data.vehicle_price else None
+    
     event = TrafficEvent(
         id=str(uuid.uuid4()),
         business_id=business.id,
@@ -1292,11 +1310,83 @@ async def public_track(data: TrackEventRequest, session: AsyncSession = Depends(
         country=data.country,
         city=data.city,
         device_type=data.device_type,
-        browser=data.browser
+        browser=data.browser,
+        # Vehicle data
+        vehicle_id=data.vehicle_id,
+        vehicle_year=data.vehicle_year,
+        vehicle_make=data.vehicle_make,
+        vehicle_model=data.vehicle_model,
+        vehicle_trim=data.vehicle_trim,
+        vehicle_price=data.vehicle_price,
+        price_bucket=price_bucket,
+        zip_code=data.zip_code
     )
     session.add(event)
     await session.commit()
     return {"success": True, "visitor_id": visitor.id}
+
+@api_router.post("/public/vehicle-lead")
+async def public_vehicle_lead(data: VehicleLeadRequest, session: AsyncSession = Depends(get_db_session)):
+    """Capture vehicle lead from Unlock Instant Price modal"""
+    result = await session.execute(select(Business).where(Business.public_key == data.public_key))
+    business = result.scalar_one_or_none()
+    if not business:
+        raise HTTPException(status_code=404, detail="Invalid public key")
+    
+    # Create vehicle lead
+    lead = VehicleLead(
+        id=str(uuid.uuid4()),
+        business_id=business.id,
+        session_id=data.session_id,
+        first_name=data.first_name,
+        last_name=data.last_name,
+        phone=data.phone,
+        email=data.email,
+        contact_method=data.contact_method,
+        comments=data.comments,
+        vehicle_id=data.vehicle_id,
+        vehicle_year=data.vehicle_year,
+        vehicle_make=data.vehicle_make,
+        vehicle_model=data.vehicle_model,
+        vehicle_trim=data.vehicle_trim,
+        vehicle_price=data.vehicle_price,
+        vehicle_image=data.vehicle_image,
+        utm_source=data.utm_source,
+        utm_medium=data.utm_medium,
+        utm_campaign=data.utm_campaign,
+        zip_code=data.zip_code,
+        page_url=data.page_url,
+        status="new"
+    )
+    session.add(lead)
+    
+    # Also track as lead_submit event
+    price_bucket = get_price_bucket(data.vehicle_price) if data.vehicle_price else None
+    event = TrafficEvent(
+        id=str(uuid.uuid4()),
+        business_id=business.id,
+        event_type="lead_submit",
+        page_url=data.page_url,
+        utm_source=data.utm_source,
+        utm_medium=data.utm_medium,
+        utm_campaign=data.utm_campaign,
+        vehicle_id=data.vehicle_id,
+        vehicle_year=data.vehicle_year,
+        vehicle_make=data.vehicle_make,
+        vehicle_model=data.vehicle_model,
+        vehicle_trim=data.vehicle_trim,
+        vehicle_price=data.vehicle_price,
+        price_bucket=price_bucket,
+        zip_code=data.zip_code
+    )
+    session.add(event)
+    
+    await session.commit()
+    return {
+        "success": True,
+        "lead_id": lead.id,
+        "message": "Your instant price is being revealed"
+    }
 
 @api_router.post("/public/leads/capture")
 async def public_capture_lead(data: LeadCaptureRequest, session: AsyncSession = Depends(get_db_session)):
