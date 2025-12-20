@@ -934,40 +934,6 @@ async def dashboard_top_vehicles(current_user: User = Depends(get_current_user),
         })
     
     return vehicles
-    
-    # Map page URLs to vehicle names (demo data mapping)
-    vehicle_mapping = {
-        "/": "2024 Toyota Camry SE",
-        "/pricing": "2023 Honda CR-V EX",
-        "/features": "2024 Ford F-150 XLT",
-        "/about": "2023 Tesla Model 3",
-        "/contact": "2024 Chevrolet Equinox LT",
-        "/signup": "2023 BMW X3 xDrive30i",
-        "/test-page": "2024 Hyundai Tucson SEL",
-        "/test-production": "2023 Mazda CX-5 Touring"
-    }
-    
-    price_mapping = {
-        "2024 Toyota Camry SE": 28995,
-        "2023 Honda CR-V EX": 34750,
-        "2024 Ford F-150 XLT": 52890,
-        "2023 Tesla Model 3": 42990,
-        "2024 Chevrolet Equinox LT": 31995,
-        "2023 BMW X3 xDrive30i": 48900,
-        "2024 Hyundai Tucson SEL": 32450,
-        "2023 Mazda CX-5 Touring": 31650
-    }
-    
-    vehicles = []
-    for row in result.all():
-        vehicle_name = vehicle_mapping.get(row[0], f"Vehicle {row[0]}")
-        vehicles.append({
-            "vehicle": vehicle_name,
-            "views": row[1],
-            "avg_price": price_mapping.get(vehicle_name, 29999)
-        })
-    
-    return vehicles
 
 @api_router.get("/dashboard/vehicle-types")
 async def dashboard_vehicle_types(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
