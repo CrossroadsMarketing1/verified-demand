@@ -728,6 +728,37 @@ async def get_leads(
     result = await session.execute(query)
     return [LeadResponse.model_validate(l) for l in result.scalars().all()]
 
+@api_router.get("/vehicle-leads")
+async def get_vehicle_leads(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+    status: Optional[str] = None,
+    limit: int = Query(default=100, le=500)
+):
+    """Get vehicle leads from the Unlock Instant Price modal"""
+    business = await get_or_create_business(current_user, session)
+    query = select(VehicleLead).where(VehicleLead.business_id == business.id)
+    if status:
+        query = query.where(VehicleLead.status == status)
+    query = query.order_by(desc(VehicleLead.created_at)).limit(limit)
+    result = await session.execute(query)
+    leads = result.scalars().all()
+    
+    return [{
+        "id": l.id,
+        "first_name": l.first_name,
+        "last_name": l.last_name,
+        "phone": l.phone,
+        "email": l.email,
+        "contact_method": l.contact_method,
+        "comments": l.comments,
+        "vehicle": f"{l.vehicle_year or ''} {l.vehicle_make or ''} {l.vehicle_model or ''} {l.vehicle_trim or ''}".strip() or "Unknown",
+        "vehicle_price": l.vehicle_price,
+        "utm_source": l.utm_source,
+        "status": l.status,
+        "created_at": l.created_at.isoformat()
+    } for l in leads]
+
 @api_router.get("/leads/export")
 async def export_leads(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
     business = await get_or_create_business(current_user, session)
