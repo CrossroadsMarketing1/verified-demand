@@ -974,80 +974,108 @@ async def dashboard_top_vehicles(current_user: User = Depends(get_current_user),
 
 @api_router.get("/dashboard/vehicle-types")
 async def dashboard_vehicle_types(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
-    """Demand by vehicle type"""
+    """Demand by vehicle type - aggregated from TrafficEvent"""
     business = await get_or_create_business(current_user, session)
     
-    # Get total events for distribution
-    total_result = await session.execute(
-        select(func.count(TrafficEvent.id))
-        .where(TrafficEvent.business_id == business.id)
+    # Aggregate by vehicle_type from normalized events
+    result = await session.execute(
+        select(
+            TrafficEvent.vehicle_type,
+            func.count(TrafficEvent.id).label("count")
+        )
+        .where(
+            TrafficEvent.business_id == business.id,
+            TrafficEvent.vehicle_type.isnot(None)
+        )
+        .group_by(TrafficEvent.vehicle_type)
+        .order_by(desc("count"))
     )
-    total = total_result.scalar() or 1
     
-    # Simulate vehicle type distribution based on traffic patterns
-    types = [
-        {"type": "SUV", "count": int(total * 0.35), "percentage": 35},
-        {"type": "Sedan", "count": int(total * 0.25), "percentage": 25},
-        {"type": "Truck", "count": int(total * 0.20), "percentage": 20},
-        {"type": "EV", "count": int(total * 0.12), "percentage": 12},
-        {"type": "Hybrid", "count": int(total * 0.08), "percentage": 8}
-    ]
+    rows = result.all()
+    total = sum(r[1] for r in rows) or 1
+    
+    types = []
+    for row in rows:
+        types.append({
+            "type": row[0],
+            "count": row[1],
+            "percentage": round((row[1] / total) * 100, 1)
+        })
+    
+    # If no data, return empty
+    if not types:
+        return []
+    
     return types
 
 @api_router.get("/dashboard/price-distribution")
 async def dashboard_price_distribution(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
-    """Shopper distribution by price buckets"""
+    """Shopper distribution by price buckets - aggregated from TrafficEvent"""
     business = await get_or_create_business(current_user, session)
     
-    # Get visitor count for distribution
-    visitors_result = await session.execute(
-        select(func.count(func.distinct(TrafficEvent.visitor_id)))
-        .where(TrafficEvent.business_id == business.id)
+    # Aggregate by price_bucket from normalized events
+    result = await session.execute(
+        select(
+            TrafficEvent.price_bucket,
+            func.count(TrafficEvent.id).label("count")
+        )
+        .where(
+            TrafficEvent.business_id == business.id,
+            TrafficEvent.price_bucket.isnot(None)
+        )
+        .group_by(TrafficEvent.price_bucket)
     )
-    total_visitors = visitors_result.scalar() or 100
     
-    # Price bucket distribution
-    return [
-        {"bucket": "Under $20k", "count": int(total_visitors * 0.12), "percentage": 12},
-        {"bucket": "$20k–$25k", "count": int(total_visitors * 0.18), "percentage": 18},
-        {"bucket": "$25k–$30k", "count": int(total_visitors * 0.28), "percentage": 28},
-        {"bucket": "$30k–$35k", "count": int(total_visitors * 0.24), "percentage": 24},
-        {"bucket": "$35k+", "count": int(total_visitors * 0.18), "percentage": 18}
-    ]
+    rows = result.all()
+    total = sum(r[1] for r in rows) or 1
+    
+    # Define bucket order
+    bucket_order = ["Under $20k", "$20k-$25k", "$25k-$30k", "$30k-$35k", "$35k+"]
+    bucket_map = {r[0]: r[1] for r in rows}
+    
+    distribution = []
+    for bucket in bucket_order:
+        count = bucket_map.get(bucket, 0)
+        distribution.append({
+            "bucket": bucket,
+            "count": count,
+            "percentage": round((count / total) * 100, 1) if count > 0 else 0
+        })
+    
+    return distribution
 
 @api_router.get("/dashboard/geographic-demand")
 async def dashboard_geographic_demand(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
-    """ZIP-based demand data"""
+    """ZIP-based demand data - aggregated from TrafficEvent"""
     business = await get_or_create_business(current_user, session)
     
-    # Get city data and map to ZIP codes
+    # Aggregate by zip_code from normalized events
     result = await session.execute(
-        select(TrafficEvent.city, func.count(func.distinct(TrafficEvent.visitor_id)).label("shoppers"))
+        select(
+            TrafficEvent.zip_code,
+            TrafficEvent.city,
+            func.count(func.distinct(TrafficEvent.visitor_id)).label("shoppers"),
+            func.avg(TrafficEvent.vehicle_price).label("avg_price")
+        )
         .where(
             TrafficEvent.business_id == business.id,
-            TrafficEvent.city.isnot(None)
+            or_(TrafficEvent.zip_code.isnot(None), TrafficEvent.city.isnot(None))
         )
-        .group_by(TrafficEvent.city)
+        .group_by(TrafficEvent.zip_code, TrafficEvent.city)
         .order_by(desc("shoppers"))
         .limit(10)
     )
     
-    # Map cities to ZIP codes (demo mapping)
-    zip_mapping = {
-        "New York": "10001",
-        "Los Angeles": "90001", 
-        "Chicago": "60601",
-        "Houston": "77001",
-        "Phoenix": "85001",
-        "San Antonio": "78201",
-        "Dallas": "75201",
-        "Austin": "78701",
-        "London": "SW1A",
-        "Toronto": "M5H",
-        "Berlin": "10115",
-        "Paris": "75001",
-        "Sydney": "2000",
-        "Tokyo": "100-0001",
+    zips = []
+    for row in result.all():
+        zips.append({
+            "zip": row[0] or "N/A",
+            "city": row[1] or "Unknown",
+            "shoppers": row[2],
+            "avg_price": int(row[3]) if row[3] else 0
+        })
+    
+    return zips
         "São Paulo": "01310"
     }
     
