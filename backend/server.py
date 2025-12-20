@@ -2377,6 +2377,29 @@ def get_embed_script():
 async def serve_embed_js_api():
     return get_embed_script()
 
+@api_router.delete("/admin/clear-data")
+async def clear_all_data(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
+    """Clear all demo data for the current user's business"""
+    business = await get_or_create_business(current_user, session)
+    
+    # Delete traffic events
+    await session.execute(text("DELETE FROM traffic_events WHERE business_id = :bid"), {"bid": business.id})
+    
+    # Delete visitors
+    await session.execute(text("DELETE FROM visitors WHERE business_id = :bid"), {"bid": business.id})
+    
+    # Delete leads
+    await session.execute(text("DELETE FROM leads WHERE business_id = :bid"), {"bid": business.id})
+    
+    # Delete vehicle_leads if table exists
+    try:
+        await session.execute(text("DELETE FROM vehicle_leads WHERE business_id = :bid"), {"bid": business.id})
+    except:
+        pass
+    
+    await session.commit()
+    return {"success": True, "message": "All data cleared"}
+
 # Include router and middleware
 app.include_router(api_router)
 
