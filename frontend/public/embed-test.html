@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verified Demand - Embed Test</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: #f5f5f5; padding: 40px 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 40px; color: #1F2937; }
+        .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 24px; }
+        .vehicle-card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .vehicle-image { width: 100%; height: 200px; object-fit: cover; background: #e5e7eb; }
+        .vehicle-content { padding: 20px; }
+        .vehicle-title { font-size: 20px; font-weight: 700; color: #1F2937; margin-bottom: 8px; }
+        .vehicle-trim { font-size: 14px; color: #6B7280; margin-bottom: 12px; }
+        .vehicle-price { font-size: 24px; font-weight: 700; color: #1E3A8A; margin-bottom: 16px; }
+        .unlock-btn { width: 100%; padding: 14px; background: #1E3A8A; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        .unlock-btn:hover { background: #1E40AF; }
+        .note { text-align: center; margin-top: 40px; color: #6B7280; font-size: 14px; padding: 20px; background: white; border-radius: 8px; }
+        .note code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 Demo Dealership Inventory</h1>
+        
+        <div class="inventory-grid">
+            <!-- Vehicle 1 - Full data attributes -->
+            <div class="vehicle-card">
+                <img class="vehicle-image" src="https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=400&h=200&fit=crop" alt="Toyota Camry">
+                <div class="vehicle-content">
+                    <div class="vehicle-title">2024 Toyota Camry</div>
+                    <div class="vehicle-trim">XSE • 28,450 miles</div>
+                    <div class="vehicle-price">$32,995</div>
+                    <button class="unlock-btn" 
+                        data-vd-trigger
+                        data-vd-vehicle-id="VIN-CAMRY-001"
+                        data-vd-year="2024"
+                        data-vd-make="Toyota"
+                        data-vd-model="Camry"
+                        data-vd-trim="XSE"
+                        data-vd-price="32995"
+                        data-vd-image="https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=400&h=200&fit=crop">
+                        🔒 Unlock Instant Price
+                    </button>
+                </div>
+            </div>
+
+            <!-- Vehicle 2 -->
+            <div class="vehicle-card">
+                <img class="vehicle-image" src="https://images.unsplash.com/photo-1606611013016-969c19ba27bb?w=400&h=200&fit=crop" alt="Honda CR-V">
+                <div class="vehicle-content">
+                    <div class="vehicle-title">2023 Honda CR-V</div>
+                    <div class="vehicle-trim">EX-L • 15,200 miles</div>
+                    <div class="vehicle-price">$34,750</div>
+                    <button class="unlock-btn"
+                        data-vd-trigger
+                        data-vd-vehicle-id="VIN-CRV-002"
+                        data-vd-year="2023"
+                        data-vd-make="Honda"
+                        data-vd-model="CR-V"
+                        data-vd-trim="EX-L"
+                        data-vd-price="34750"
+                        data-vd-image="https://images.unsplash.com/photo-1606611013016-969c19ba27bb?w=400&h=200&fit=crop">
+                        🔒 Unlock Instant Price
+                    </button>
+                </div>
+            </div>
+
+            <!-- Vehicle 3 -->
+            <div class="vehicle-card">
+                <img class="vehicle-image" src="https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=400&h=200&fit=crop" alt="Ford F-150">
+                <div class="vehicle-content">
+                    <div class="vehicle-title">2024 Ford F-150</div>
+                    <div class="vehicle-trim">XLT • 8,900 miles</div>
+                    <div class="vehicle-price">$52,890</div>
+                    <button class="unlock-btn"
+                        data-vd-trigger
+                        data-vd-vehicle-id="VIN-F150-003"
+                        data-vd-year="2024"
+                        data-vd-make="Ford"
+                        data-vd-model="F-150"
+                        data-vd-trim="XLT"
+                        data-vd-price="52890"
+                        data-vd-image="https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=400&h=200&fit=crop">
+                        🔒 Unlock Instant Price
+                    </button>
+                </div>
+            </div>
+
+            <!-- Vehicle 4 - Minimal data (will infer) -->
+            <div class="vehicle-card listing">
+                <img class="vehicle-image" src="https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=400&h=200&fit=crop" alt="Tesla Model 3">
+                <div class="vehicle-content">
+                    <h3 class="vehicle-title">2023 Tesla Model 3 Long Range</h3>
+                    <div class="vehicle-trim">Long Range • 12,400 miles</div>
+                    <div class="vehicle-price" data-price="42990">$42,990</div>
+                    <button class="unlock-btn" data-vd-trigger>
+                        🔒 Unlock Instant Price
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="note">
+            <strong>How it works:</strong> This page demonstrates the Verified Demand embed script. 
+            Click any "Unlock Instant Price" button to see the modal. The script is loaded with:<br><br>
+            <code>&lt;script src="https://loadoffers.preview.emergentagent.com/api/embed.js" data-public-key="ef0f22841f1cbb777784ee71665c06d0" data-debug="true"&gt;&lt;/script&gt;</code>
+        </div>
+    </div>
+
+    <!-- Verified Demand Embed Script -->
+    <script src="https://loadoffers.preview.emergentagent.com/api/embed.js" data-public-key="ef0f22841f1cbb777784ee71665c06d0" data-debug="true"></script>
+</body>
+</html>
