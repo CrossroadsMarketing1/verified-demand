@@ -1110,10 +1110,10 @@ async def dashboard_marketing_effectiveness(current_user: User = Depends(get_cur
 
 @api_router.get("/dashboard/recent-activity")
 async def dashboard_recent_activity(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
-    """Recent shopper activity feed"""
+    """Recent shopper activity feed - using real data"""
     business = await get_or_create_business(current_user, session)
     
-    # Get recent events
+    # Get recent events with vehicle data
     events_result = await session.execute(
         select(TrafficEvent)
         .where(TrafficEvent.business_id == business.id)
@@ -1122,43 +1122,69 @@ async def dashboard_recent_activity(current_user: User = Depends(get_current_use
     )
     events = events_result.scalars().all()
     
-    # Get recent leads
-    leads_result = await session.execute(
-        select(Lead)
-        .where(Lead.business_id == business.id)
-        .order_by(desc(Lead.created_at))
+    # Get recent vehicle leads
+    vehicle_leads_result = await session.execute(
+        select(VehicleLead)
+        .where(VehicleLead.business_id == business.id)
+        .order_by(desc(VehicleLead.created_at))
         .limit(10)
     )
-    leads = leads_result.scalars().all()
-    
-    vehicle_names = [
-        "2024 Toyota Camry SE", "2023 Honda CR-V EX", "2024 Ford F-150 XLT",
-        "2023 Tesla Model 3", "2024 Chevrolet Equinox LT", "2023 BMW X3",
-        "2024 Hyundai Tucson", "2023 Mazda CX-5", "2024 Kia Sportage",
-        "2023 Subaru Outback"
-    ]
+    vehicle_leads = vehicle_leads_result.scalars().all()
     
     activity = []
     
-    # Add vehicle view events
-    for e in events[:15]:
+    # Add events
+    for e in events:
+        # Build vehicle name from actual data
+        vehicle_name = ""
+        if e.vehicle_year or e.vehicle_make or e.vehicle_model:
+            vehicle_name = f"{e.vehicle_year or ''} {e.vehicle_make or ''} {e.vehicle_model or ''} {e.vehicle_trim or ''}".strip()
+        
+        if not vehicle_name:
+            vehicle_name = "Vehicle"
+        
+        event_type = e.event_type
+        if event_type == "modal_open":
+            action_type = "vehicle_view"
+        elif event_type == "unlock_click":
+            action_type = "vehicle_view"
+        elif event_type == "lead_submit":
+            action_type = "lead_captured"
+        else:
+            action_type = event_type
+        
         activity.append({
             "id": e.id,
-            "type": "vehicle_view",
-            "vehicle": random.choice(vehicle_names),
+            "type": action_type,
+            "vehicle": vehicle_name,
             "source": e.utm_source or "Direct",
-            "location": e.city or "Unknown",
+            "location": e.city or e.zip_code or "",
             "timestamp": e.created_at.isoformat()
         })
     
-    # Add lead events
-    for l in leads[:5]:
+    # Add vehicle leads
+    for lead in vehicle_leads:
+        vehicle_name = ""
+        if lead.vehicle_year or lead.vehicle_make or lead.vehicle_model:
+            vehicle_name = f"{lead.vehicle_year or ''} {lead.vehicle_make or ''} {lead.vehicle_model or ''} {lead.vehicle_trim or ''}".strip()
+        
+        if not vehicle_name:
+            vehicle_name = "Vehicle"
+        
+        # Mask email/phone for privacy
+        contact = ""
+        if lead.phone:
+            contact = lead.phone[:6] + "****"
+        elif lead.email:
+            contact = lead.email[:3] + "***"
+        
         activity.append({
-            "id": l.id,
-            "type": "lead_verified" if l.is_verified else "lead_captured",
-            "vehicle": random.choice(vehicle_names),
-            "email": l.email[:3] + "***@" + l.email.split("@")[1] if "@" in l.email else l.email,
-            "timestamp": l.created_at.isoformat()
+            "id": lead.id,
+            "type": "lead_submitted",
+            "vehicle": vehicle_name,
+            "contact": f"{lead.first_name} {lead.last_name[0]}.",
+            "source": lead.utm_source or "Direct",
+            "timestamp": lead.created_at.isoformat()
         })
     
     # Sort by timestamp
