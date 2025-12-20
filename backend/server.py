@@ -169,8 +169,10 @@ class TrafficEvent(Base):
     vehicle_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     vehicle_trim: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     vehicle_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    vehicle_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # SUV/Sedan/Truck/EV/Hybrid
     price_bucket: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     zip_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    source: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # Normalized source field
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class VehicleLead(Base):
