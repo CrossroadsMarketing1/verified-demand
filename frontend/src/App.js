@@ -983,8 +983,8 @@ const LeadsPage = () => {
     const fetchLeads = async () => {
       setIsLoading(true);
       try {
-        const params = filter === "verified" ? "?is_verified=true" : filter === "unverified" ? "?is_verified=false" : "";
-        const res = await apiFetch(`/leads${params}`, { method: "GET" });
+        const params = filter !== "all" ? `?status=${filter}` : "";
+        const res = await apiFetch(`/vehicle-leads${params}`, { method: "GET" });
         if (isMounted) {
           setLeads(res.data);
           setIsLoading(false);
@@ -1006,20 +1006,14 @@ const LeadsPage = () => {
     return () => { isMounted = false; };
   }, [apiFetch, toast, filter]);
 
-  const exportLeads = async () => {
-    try {
-      const res = await apiFetch("/leads/export", { method: "GET", responseType: "blob" });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", "leads.csv");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      toast.success("Leads exported successfully");
-    } catch (e) {
-      toast.error("Error exporting leads");
-    }
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  };
+
+  const formatPrice = (price) => {
+    if (!price) return '-';
+    return '$' + price.toLocaleString();
   };
 
   if (isLoading) return <div className="loading">Loading...</div>;
@@ -1027,37 +1021,56 @@ const LeadsPage = () => {
   return (
     <div className="page" data-testid="leads-page">
       <div className="page-header">
-        <h2>Leads</h2>
+        <h2>Vehicle Leads</h2>
         <div className="header-actions">
           <select value={filter} onChange={(e) => setFilter(e.target.value)} className="filter-select">
             <option value="all">All Leads</option>
-            <option value="verified">Verified Only</option>
-            <option value="unverified">Unverified Only</option>
+            <option value="new">New</option>
+            <option value="contacted">Contacted</option>
+            <option value="closed">Closed</option>
           </select>
-          <button className="btn-primary" onClick={exportLeads}>Export CSV</button>
         </div>
       </div>
       {leads.length === 0 ? (
         <div className="empty-state-box">
           <h3>No leads yet</h3>
-          <p>Leads captured through your embed will appear here.</p>
+          <p>Leads captured through the "Unlock Instant Price" modal will appear here.</p>
         </div>
       ) : (
         <table className="data-table">
           <thead>
             <tr>
-              <th>Email</th>
-              <th>Name</th>
+              <th>Contact</th>
+              <th>Phone</th>
+              <th>Vehicle</th>
+              <th>Price</th>
+              <th>Preferred Contact</th>
               <th>Source</th>
-              <th>Campaign</th>
-              <th>Verified</th>
               <th>Date</th>
             </tr>
           </thead>
           <tbody>
             {leads.map(lead => (
               <tr key={lead.id}>
-                <td>{lead.email}</td>
+                <td>
+                  <strong>{lead.first_name} {lead.last_name}</strong>
+                  {lead.email && <div style={{fontSize: '12px', color: '#6B7280'}}>{lead.email}</div>}
+                </td>
+                <td>{lead.phone}</td>
+                <td><strong>{lead.vehicle}</strong></td>
+                <td>{formatPrice(lead.vehicle_price)}</td>
+                <td>
+                  <span className={`contact-badge ${lead.contact_method}`}>
+                    {lead.contact_method === 'text' ? '💬 Text' : lead.contact_method === 'call' ? '📞 Call' : '✉️ Email'}
+                  </span>
+                </td>
+                <td>{lead.utm_source || 'Direct'}</td>
+                <td>{formatDate(lead.created_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
                 <td>{lead.name || "-"}</td>
                 <td>{lead.utm_source || lead.source || "-"}</td>
                 <td>{lead.utm_campaign || "-"}</td>
