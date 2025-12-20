@@ -373,7 +373,12 @@ const Sidebar = ({ currentPage, setCurrentPage }) => {
 const OverviewPage = () => {
   const { apiFetch } = useAuth();
   const toast = useToast();
-  const [stats, setStats] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [topVehicles, setTopVehicles] = useState([]);
+  const [vehicleTypes, setVehicleTypes] = useState([]);
+  const [priceDistribution, setPriceDistribution] = useState([]);
+  const [geographicDemand, setGeographicDemand] = useState([]);
+  const [marketingEffectiveness, setMarketingEffectiveness] = useState([]);
   const [recentActivity, setRecentActivity] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const errorShownRef = useRef(false);
@@ -383,12 +388,22 @@ const OverviewPage = () => {
     
     const fetchData = async () => {
       try {
-        const [statsRes, activityRes] = await Promise.all([
-          apiFetch("/analytics/overview", { method: "GET" }),
-          apiFetch("/analytics/recent-activity?limit=10", { method: "GET" })
+        const [summaryRes, vehiclesRes, typesRes, priceRes, geoRes, marketingRes, activityRes] = await Promise.all([
+          apiFetch("/dashboard/summary", { method: "GET" }),
+          apiFetch("/dashboard/top-vehicles", { method: "GET" }),
+          apiFetch("/dashboard/vehicle-types", { method: "GET" }),
+          apiFetch("/dashboard/price-distribution", { method: "GET" }),
+          apiFetch("/dashboard/geographic-demand", { method: "GET" }),
+          apiFetch("/dashboard/marketing-effectiveness", { method: "GET" }),
+          apiFetch("/dashboard/recent-activity", { method: "GET" })
         ]);
         if (isMounted) {
-          setStats(statsRes.data);
+          setSummary(summaryRes.data);
+          setTopVehicles(vehiclesRes.data);
+          setVehicleTypes(typesRes.data);
+          setPriceDistribution(priceRes.data);
+          setGeographicDemand(geoRes.data);
+          setMarketingEffectiveness(marketingRes.data);
           setRecentActivity(activityRes.data);
           setIsLoading(false);
         }
@@ -398,7 +413,7 @@ const OverviewPage = () => {
           setIsLoading(false);
           if (!errorShownRef.current) {
             errorShownRef.current = true;
-            toast.error("Failed to load overview", "load_overview");
+            toast.error("Failed to load dashboard", "load_dashboard");
           }
         }
       }
@@ -408,49 +423,208 @@ const OverviewPage = () => {
     return () => { isMounted = false; };
   }, [apiFetch, toast]);
 
-  if (isLoading) return <div className="loading">Loading...</div>;
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+  };
+
+  const formatTime = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return date.toLocaleDateString();
+  };
+
+  if (isLoading) return <div className="loading">Loading dashboard...</div>;
+
+  const maxTypeCount = Math.max(...vehicleTypes.map(t => t.count), 1);
+  const maxPriceCount = Math.max(...priceDistribution.map(p => p.count), 1);
 
   return (
-    <div className="page" data-testid="overview-page">
-      <h2>Overview</h2>
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-value">{stats?.total_visitors || 0}</div>
-          <div className="stat-label">Total Visitors</div>
+    <div className="page dashboard-page" data-testid="overview-page">
+      <div className="dashboard-header">
+        <h2>Buyer Demand Intelligence</h2>
+        <span className="dashboard-subtitle">Last 7 days</span>
+      </div>
+
+      {/* Section 1: Summary Metrics */}
+      <div className="metrics-grid">
+        <div className="metric-card">
+          <div className="metric-icon">👥</div>
+          <div className="metric-content">
+            <div className="metric-value">{summary?.active_shoppers || 0}</div>
+            <div className="metric-label">Active Shoppers</div>
+          </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">{stats?.total_leads || 0}</div>
-          <div className="stat-label">Total Leads</div>
+        <div className="metric-card">
+          <div className="metric-icon">🚗</div>
+          <div className="metric-content">
+            <div className="metric-value">{summary?.vehicles_viewed || 0}</div>
+            <div className="metric-label">Vehicles Viewed</div>
+          </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">{stats?.verified_leads || 0}</div>
-          <div className="stat-label">Verified Leads</div>
+        <div className="metric-card">
+          <div className="metric-icon">💰</div>
+          <div className="metric-content">
+            <div className="metric-value">{formatCurrency(summary?.avg_vehicle_price || 0)}</div>
+            <div className="metric-label">Avg Price Viewed</div>
+          </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">{stats?.conversion_rate || 0}%</div>
-          <div className="stat-label">Conversion Rate</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{stats?.active_offers || 0}</div>
-          <div className="stat-label">Active Offers</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">{stats?.total_pageviews || 0}</div>
-          <div className="stat-label">Page Views</div>
+        <div className="metric-card highlight">
+          <div className="metric-icon">📈</div>
+          <div className="metric-content">
+            <div className="metric-value">{summary?.lead_conversion_rate || 0}%</div>
+            <div className="metric-label">Lead Conversion</div>
+          </div>
         </div>
       </div>
-      <div className="section">
-        <h3>Recent Activity</h3>
-        <div className="activity-list">
+
+      {/* Section 2: Vehicle Demand Snapshot */}
+      <div className="dashboard-row">
+        <div className="dashboard-card">
+          <h3>Top Vehicles by Demand</h3>
+          <table className="vehicles-table">
+            <thead>
+              <tr>
+                <th>Vehicle</th>
+                <th>Views</th>
+                <th>Avg Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topVehicles.length === 0 ? (
+                <tr><td colSpan="3" className="empty-cell">No vehicle data yet</td></tr>
+              ) : (
+                topVehicles.map((v, i) => (
+                  <tr key={i}>
+                    <td className="vehicle-name">{v.vehicle}</td>
+                    <td className="vehicle-views">{v.views}</td>
+                    <td className="vehicle-price">{formatCurrency(v.avg_price)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="dashboard-card">
+          <h3>Demand by Vehicle Type</h3>
+          <div className="type-chart">
+            {vehicleTypes.map((t, i) => (
+              <div key={i} className="type-row">
+                <span className="type-label">{t.type}</span>
+                <div className="type-bar-container">
+                  <div className="type-bar" style={{ width: `${(t.count / maxTypeCount) * 100}%` }}></div>
+                </div>
+                <span className="type-value">{t.percentage}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Section 3: Price Intelligence */}
+      <div className="dashboard-card full-width">
+        <h3>Shopper Price Intelligence</h3>
+        <div className="price-chart">
+          {priceDistribution.map((p, i) => (
+            <div key={i} className="price-row">
+              <span className="price-label">{p.bucket}</span>
+              <div className="price-bar-container">
+                <div className="price-bar" style={{ width: `${(p.count / maxPriceCount) * 100}%` }}>
+                  <span className="price-bar-label">{p.count} shoppers</span>
+                </div>
+              </div>
+              <span className="price-percent">{p.percentage}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Section 4: Geographic Demand */}
+      <div className="dashboard-card full-width">
+        <h3>Geographic Demand</h3>
+        <table className="geo-table">
+          <thead>
+            <tr>
+              <th>ZIP Code</th>
+              <th>City</th>
+              <th>Shoppers</th>
+              <th>Avg Price Viewed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {geographicDemand.length === 0 ? (
+              <tr><td colSpan="4" className="empty-cell">No geographic data yet</td></tr>
+            ) : (
+              geographicDemand.map((g, i) => (
+                <tr key={i}>
+                  <td className="zip-code">{g.zip}</td>
+                  <td>{g.city}</td>
+                  <td>{g.shoppers}</td>
+                  <td>{formatCurrency(g.avg_price)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Section 5: Marketing Effectiveness */}
+      <div className="dashboard-card full-width">
+        <h3>Marketing Source Effectiveness</h3>
+        <table className="marketing-table">
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>Shoppers</th>
+              <th>Verified Leads</th>
+              <th>Avg Vehicle Price</th>
+              <th>Conversion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {marketingEffectiveness.length === 0 ? (
+              <tr><td colSpan="5" className="empty-cell">No marketing data yet</td></tr>
+            ) : (
+              marketingEffectiveness.map((m, i) => (
+                <tr key={i}>
+                  <td className="source-name">{m.source}</td>
+                  <td>{m.shoppers}</td>
+                  <td>{m.verified_leads}</td>
+                  <td>{formatCurrency(m.avg_vehicle_price)}</td>
+                  <td className="conversion-rate">{m.conversion_rate}%</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Section 6: Recent Activity */}
+      <div className="dashboard-card full-width">
+        <h3>Recent Shopper Activity</h3>
+        <div className="activity-feed">
           {recentActivity.length === 0 ? (
-            <p className="empty-state">No recent activity. Generate demo data from Settings.</p>
+            <p className="empty-state">No recent activity</p>
           ) : (
-            recentActivity.map(event => (
-              <div key={event.id} className="activity-item">
-                <span className="activity-type">{event.event_type}</span>
-                <span className="activity-url">{event.page_url}</span>
-                <span className="activity-source">{event.utm_source || "direct"}</span>
-                <span className="activity-time">{new Date(event.created_at).toLocaleString()}</span>
+            recentActivity.map((a, i) => (
+              <div key={i} className={`activity-row ${a.type}`}>
+                <span className="activity-icon">
+                  {a.type === 'vehicle_view' ? '👁️' : a.type === 'lead_verified' ? '✅' : '📝'}
+                </span>
+                <div className="activity-details">
+                  <span className="activity-action">
+                    {a.type === 'vehicle_view' ? 'Viewed' : a.type === 'lead_verified' ? 'Lead verified' : 'Lead captured'}
+                  </span>
+                  <span className="activity-vehicle">{a.vehicle}</span>
+                  {a.source && <span className="activity-source">via {a.source}</span>}
+                  {a.location && <span className="activity-location">• {a.location}</span>}
+                  {a.email && <span className="activity-email">• {a.email}</span>}
+                </div>
+                <span className="activity-time">{formatTime(a.timestamp)}</span>
               </div>
             ))
           )}
