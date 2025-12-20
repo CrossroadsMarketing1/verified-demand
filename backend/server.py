@@ -162,6 +162,46 @@ class TrafficEvent(Base):
     device_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     browser: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     event_metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Vehicle-specific fields
+    vehicle_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    vehicle_year: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    vehicle_make: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    vehicle_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    vehicle_trim: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    vehicle_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    price_bucket: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    zip_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+class VehicleLead(Base):
+    __tablename__ = "vehicle_leads"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    business_id: Mapped[str] = mapped_column(String(36), ForeignKey("businesses.id"), nullable=False)
+    visitor_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    session_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    # Lead info
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    phone: Mapped[str] = mapped_column(String(50), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    contact_method: Mapped[str] = mapped_column(String(20), default="text")
+    comments: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Vehicle info
+    vehicle_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    vehicle_year: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    vehicle_make: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    vehicle_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    vehicle_trim: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    vehicle_price: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    vehicle_image: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Attribution
+    utm_source: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    utm_medium: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    utm_campaign: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    zip_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    page_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Status
+    status: Mapped[str] = mapped_column(String(50), default="new")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class VerificationCode(Base):
