@@ -844,7 +844,7 @@ async def dashboard_summary(current_user: User = Depends(get_current_user), sess
     business = await get_or_create_business(current_user, session)
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
     
-    # Count unique visitors with vehicle interactions (active shoppers)
+    # Count unique visitors (active shoppers)
     active_shoppers_result = await session.execute(
         select(func.count(func.distinct(TrafficEvent.visitor_id)))
         .where(
@@ -855,49 +855,85 @@ async def dashboard_summary(current_user: User = Depends(get_current_user), sess
     )
     active_shoppers = active_shoppers_result.scalar() or 0
     
-    # Count vehicle views
+    # Count vehicle views (modal opens or vehicle_view events)
     vehicles_viewed_result = await session.execute(
         select(func.count(TrafficEvent.id))
         .where(
             TrafficEvent.business_id == business.id,
-            TrafficEvent.event_type.in_(['vehicle_view', 'pageview'])
+            TrafficEvent.event_type.in_(['modal_open', 'unlock_click', 'vehicle_view'])
         )
     )
     vehicles_viewed = vehicles_viewed_result.scalar() or 0
     
-    # Count verified leads
-    verified_leads_result = await session.execute(
-        select(func.count(Lead.id))
-        .where(Lead.business_id == business.id, Lead.is_verified == True)
+    # Calculate average vehicle price from events with price data
+    avg_price_result = await session.execute(
+        select(func.avg(TrafficEvent.vehicle_price))
+        .where(
+            TrafficEvent.business_id == business.id,
+            TrafficEvent.vehicle_price.isnot(None)
+        )
     )
-    verified_leads = verified_leads_result.scalar() or 0
+    avg_price = avg_price_result.scalar() or 0
+    
+    # Count vehicle leads (from vehicle_leads table)
+    vehicle_leads_result = await session.execute(
+        select(func.count(VehicleLead.id))
+        .where(VehicleLead.business_id == business.id)
+    )
+    total_leads = vehicle_leads_result.scalar() or 0
     
     # Calculate conversion rate
-    conversion_rate = (verified_leads / active_shoppers * 100) if active_shoppers > 0 else 0
+    conversion_rate = (total_leads / active_shoppers * 100) if active_shoppers > 0 else 0
     
     return {
         "active_shoppers": active_shoppers,
         "vehicles_viewed": vehicles_viewed,
-        "avg_vehicle_price": 32450,  # Will be calculated from actual vehicle data
-        "lead_conversion_rate": round(conversion_rate, 1)
+        "avg_vehicle_price": int(avg_price) if avg_price else 0,
+        "lead_conversion_rate": round(conversion_rate, 1),
+        "total_leads": total_leads
     }
 
 @api_router.get("/dashboard/top-vehicles")
 async def dashboard_top_vehicles(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
-    """Top 5 vehicles by views"""
+    """Top 5 vehicles by views - using actual vehicle data"""
     business = await get_or_create_business(current_user, session)
     
-    # Get page URLs that look like vehicle pages and count views
+    # Group by actual vehicle make/model and count views
     result = await session.execute(
-        select(TrafficEvent.page_url, func.count(TrafficEvent.id).label("views"))
+        select(
+            TrafficEvent.vehicle_year,
+            TrafficEvent.vehicle_make,
+            TrafficEvent.vehicle_model,
+            TrafficEvent.vehicle_trim,
+            func.count(TrafficEvent.id).label("views"),
+            func.avg(TrafficEvent.vehicle_price).label("avg_price")
+        )
         .where(
             TrafficEvent.business_id == business.id,
-            TrafficEvent.page_url.isnot(None)
+            TrafficEvent.vehicle_make.isnot(None)
         )
-        .group_by(TrafficEvent.page_url)
+        .group_by(
+            TrafficEvent.vehicle_year,
+            TrafficEvent.vehicle_make,
+            TrafficEvent.vehicle_model,
+            TrafficEvent.vehicle_trim
+        )
         .order_by(desc("views"))
         .limit(5)
     )
+    
+    vehicles = []
+    for row in result.all():
+        vehicle_name = f"{row[0] or ''} {row[1] or ''} {row[2] or ''} {row[3] or ''}".strip()
+        if not vehicle_name:
+            vehicle_name = "Unknown Vehicle"
+        vehicles.append({
+            "vehicle": vehicle_name,
+            "views": row[4],
+            "avg_price": int(row[5]) if row[5] else 0
+        })
+    
+    return vehicles
     
     # Map page URLs to vehicle names (demo data mapping)
     vehicle_mapping = {
