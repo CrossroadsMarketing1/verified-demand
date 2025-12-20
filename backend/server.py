@@ -284,6 +284,15 @@ async def init_db():
                     await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS city VARCHAR(100)"))
                     await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS device_type VARCHAR(50)"))
                     await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS browser VARCHAR(50)"))
+                    # Vehicle-specific columns
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS vehicle_id VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS vehicle_year VARCHAR(10)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS vehicle_make VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS vehicle_model VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS vehicle_trim VARCHAR(100)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS vehicle_price INTEGER"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS price_bucket VARCHAR(50)"))
+                    await session.execute(text("ALTER TABLE traffic_events ADD COLUMN IF NOT EXISTS zip_code VARCHAR(20)"))
                     await session.commit()
                 except Exception as e:
                     logger.warning(f"Migration note: {e}")
