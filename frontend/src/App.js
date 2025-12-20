@@ -1071,16 +1071,6 @@ const LeadsPage = () => {
           </tbody>
         </table>
       )}
-                <td>{lead.name || "-"}</td>
-                <td>{lead.utm_source || lead.source || "-"}</td>
-                <td>{lead.utm_campaign || "-"}</td>
-                <td><span className={`badge ${lead.is_verified ? "verified" : "unverified"}`}>{lead.is_verified ? "✓" : "○"}</span></td>
-                <td>{new Date(lead.created_at).toLocaleDateString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
     </div>
   );
 };
