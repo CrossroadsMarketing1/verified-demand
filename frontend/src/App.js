@@ -1428,13 +1428,14 @@ const SettingsPage = () => {
       <div className="settings-section">
         <h3>Embed Script</h3>
         <p className="section-description">
-          Add this script to your website to enable lead capture. Place it before the closing <code>&lt;/body&gt;</code> tag.
+          Add this script to your dealership website to enable the "Unlock Instant Price" modal.
         </p>
         
         <div className="embed-step">
           <div className="step-number">1</div>
           <div className="step-content">
             <h4>Add the script tag</h4>
+            <p className="step-description">Place this before the closing <code>&lt;/body&gt;</code> tag:</p>
             <pre className="code-block">{embedSnippet}</pre>
             <button 
               className={`btn-secondary ${copySuccess ? 'btn-success' : ''}`} 
@@ -1448,23 +1449,28 @@ const SettingsPage = () => {
         <div className="embed-step">
           <div className="step-number">2</div>
           <div className="step-content">
-            <h4>Add trigger elements</h4>
-            <p className="step-description">Add <code>data-vd-trigger</code> to any element that should open the offer modal:</p>
+            <h4>Tag your "Unlock Price" buttons</h4>
+            <p className="step-description">Add <code>data-vd-trigger</code> and vehicle data to your existing CTAs:</p>
             <pre className="code-block">{triggerExample}</pre>
           </div>
         </div>
 
-        {offers.length === 0 && (
-          <div className="embed-warning">
-            ⚠️ You don't have any active offers. Create an offer first to use the embed.
+        <div className="embed-step">
+          <div className="step-number">3</div>
+          <div className="step-content">
+            <h4>Test the integration</h4>
+            <p className="step-description">
+              View a live demo of the modal on our test page:
+            </p>
+            <a href={testPageUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary" style={{display: 'inline-block', textDecoration: 'none', marginTop: '8px'}}>
+              Open Test Page →
+            </a>
           </div>
-        )}
+        </div>
 
-        {offers.length > 1 && (
-          <div className="embed-info">
-            ℹ️ Using offer "{offers[0]?.title}". To use a different offer, replace the <code>data-offer-id</code> value with the desired offer ID.
-          </div>
-        )}
+        <div className="embed-info">
+          ℹ️ The modal will capture: First Name, Last Name, Phone, Contact Method, Email (optional), and Comments — along with the vehicle context.
+        </div>
       </div>
 
       {/* Demo Data */}
