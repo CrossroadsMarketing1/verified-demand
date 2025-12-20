@@ -1344,6 +1344,51 @@ def get_price_bucket(price):
     else:
         return "$35k+"
 
+def infer_vehicle_type(make, model, trim):
+    """Infer vehicle type from make/model/trim"""
+    if not make and not model:
+        return None
+    
+    text = f"{make or ''} {model or ''} {trim or ''}".lower()
+    
+    # EV detection
+    ev_keywords = ['tesla', 'model 3', 'model y', 'model s', 'model x', 'electric', 'ev', 'bolt', 'leaf', 'ioniq', 'mach-e', 'rivian', 'lucid']
+    if any(kw in text for kw in ev_keywords):
+        return "EV"
+    
+    # Hybrid detection
+    hybrid_keywords = ['hybrid', 'prius', 'phev', 'plug-in']
+    if any(kw in text for kw in hybrid_keywords):
+        return "Hybrid"
+    
+    # Truck detection
+    truck_keywords = ['f-150', 'f150', 'f-250', 'silverado', 'ram', 'tundra', 'tacoma', 'colorado', 'ranger', 'frontier', 'titan', 'ridgeline', 'gladiator', 'truck']
+    if any(kw in text for kw in truck_keywords):
+        return "Truck"
+    
+    # SUV detection
+    suv_keywords = ['suv', 'cr-v', 'crv', 'rav4', 'highlander', 'pilot', 'explorer', 'tahoe', 'suburban', 'expedition', '4runner', 'wrangler', 'grand cherokee', 'cherokee', 'equinox', 'traverse', 'blazer', 'escape', 'edge', 'bronco', 'telluride', 'palisade', 'sorento', 'sportage', 'tucson', 'santa fe', 'cx-5', 'cx-9', 'outback', 'forester', 'ascent', 'rogue', 'murano', 'pathfinder', 'x3', 'x5', 'q5', 'q7', 'gx', 'rx', 'nx', 'ux', 'mdx', 'rdx', 'xt5', 'xt6', 'escalade', 'yukon']
+    if any(kw in text for kw in suv_keywords):
+        return "SUV"
+    
+    # Default to Sedan
+    return "Sedan"
+
+def normalize_source(utm_source, referrer):
+    """Normalize source - return 'Direct' if nothing provided"""
+    if utm_source:
+        return utm_source
+    if referrer:
+        # Extract domain from referrer
+        try:
+            from urllib.parse import urlparse
+            domain = urlparse(referrer).netloc
+            if domain:
+                return domain
+        except:
+            pass
+    return "Direct"
+
 @api_router.post("/public/track")
 async def public_track(data: TrackEventRequest, session: AsyncSession = Depends(get_db_session)):
     result = await session.execute(select(Business).where(Business.public_key == data.public_key))
@@ -1359,8 +1404,10 @@ async def public_track(data: TrackEventRequest, session: AsyncSession = Depends(
         session.add(visitor)
         await session.flush()
     
-    # Calculate price bucket
+    # Normalize fields server-side
     price_bucket = get_price_bucket(data.vehicle_price) if data.vehicle_price else None
+    vehicle_type = data.vehicle_type or infer_vehicle_type(data.vehicle_make, data.vehicle_model, data.vehicle_trim)
+    source = normalize_source(data.utm_source, data.referrer)
     
     event = TrafficEvent(
         id=str(uuid.uuid4()),
@@ -1376,19 +1423,21 @@ async def public_track(data: TrackEventRequest, session: AsyncSession = Depends(
         city=data.city,
         device_type=data.device_type,
         browser=data.browser,
-        # Vehicle data
+        # Normalized vehicle data
         vehicle_id=data.vehicle_id,
         vehicle_year=data.vehicle_year,
         vehicle_make=data.vehicle_make,
         vehicle_model=data.vehicle_model,
         vehicle_trim=data.vehicle_trim,
         vehicle_price=data.vehicle_price,
+        vehicle_type=vehicle_type,
         price_bucket=price_bucket,
-        zip_code=data.zip_code
+        zip_code=data.zip_code,
+        source=source
     )
     session.add(event)
     await session.commit()
-    return {"success": True, "visitor_id": visitor.id}
+    return {"success": True, "visitor_id": visitor.id, "normalized": {"vehicle_type": vehicle_type, "price_bucket": price_bucket, "source": source}}
 
 @api_router.post("/public/vehicle-lead")
 async def public_vehicle_lead(data: VehicleLeadRequest, session: AsyncSession = Depends(get_db_session)):
@@ -1397,6 +1446,11 @@ async def public_vehicle_lead(data: VehicleLeadRequest, session: AsyncSession = 
     business = result.scalar_one_or_none()
     if not business:
         raise HTTPException(status_code=404, detail="Invalid public key")
+    
+    # Normalize fields
+    price_bucket = get_price_bucket(data.vehicle_price) if data.vehicle_price else None
+    vehicle_type = data.vehicle_type or infer_vehicle_type(data.vehicle_make, data.vehicle_model, data.vehicle_trim)
+    source = normalize_source(data.utm_source, None)
     
     # Create vehicle lead
     lead = VehicleLead(
@@ -1418,6 +1472,12 @@ async def public_vehicle_lead(data: VehicleLeadRequest, session: AsyncSession = 
         vehicle_image=data.vehicle_image,
         utm_source=data.utm_source,
         utm_medium=data.utm_medium,
+        utm_campaign=data.utm_campaign,
+        zip_code=data.zip_code,
+        page_url=data.page_url,
+        status="new"
+    )
+    session.add(lead)
         utm_campaign=data.utm_campaign,
         zip_code=data.zip_code,
         page_url=data.page_url,
