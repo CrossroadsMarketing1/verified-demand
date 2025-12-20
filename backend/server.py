@@ -426,6 +426,39 @@ class TrackEventRequest(BaseModel):
     city: Optional[str] = None
     device_type: Optional[str] = None
     browser: Optional[str] = None
+    # Vehicle fields
+    vehicle_id: Optional[str] = None
+    vehicle_year: Optional[str] = None
+    vehicle_make: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    vehicle_trim: Optional[str] = None
+    vehicle_price: Optional[int] = None
+    zip_code: Optional[str] = None
+
+class VehicleLeadRequest(BaseModel):
+    public_key: str
+    session_id: str
+    # Lead info
+    first_name: str
+    last_name: str
+    phone: str
+    email: Optional[str] = None
+    contact_method: str = "text"
+    comments: Optional[str] = None
+    # Vehicle info
+    vehicle_id: Optional[str] = None
+    vehicle_year: Optional[str] = None
+    vehicle_make: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    vehicle_trim: Optional[str] = None
+    vehicle_price: Optional[int] = None
+    vehicle_image: Optional[str] = None
+    # Attribution
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    zip_code: Optional[str] = None
+    page_url: Optional[str] = None
 
 class LeadCaptureRequest(BaseModel):
     public_key: str
