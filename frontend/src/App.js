@@ -1361,16 +1361,26 @@ const SettingsPage = () => {
 <script 
   src="${embedBaseUrl}/api/embed.js" 
   data-public-key="${business?.public_key}" 
-  data-offer-id="${selectedOfferId}"
   data-debug="false">
 </script>`;
 
-  const triggerExample = `<!-- Add data-vd-trigger to any element to open the modal -->
-<button data-vd-trigger>Get Your Offer</button>
+  const triggerExample = `<!-- Add data-vd-trigger to any "Unlock Price" button -->
+<button 
+  data-vd-trigger
+  data-vd-vehicle-id="VIN_OR_STOCK"
+  data-vd-year="2024"
+  data-vd-make="Toyota"
+  data-vd-model="Camry"
+  data-vd-trim="XSE"
+  data-vd-price="32995"
+  data-vd-image="https://your-cdn.com/vehicle.jpg">
+  Unlock Instant Price
+</button>
 
-<!-- Works on any element -->
-<a href="#" data-vd-trigger>View Pricing</a>
-<div data-vd-trigger class="cta-banner">Click for discount</div>`;
+<!-- Minimal example (vehicle data inferred from page) -->
+<button data-vd-trigger>Unlock Instant Price</button>`;
+
+  const testPageUrl = `${embedBaseUrl}/embed-test.html`;
 
   return (
     <div className="page" data-testid="settings-page">
