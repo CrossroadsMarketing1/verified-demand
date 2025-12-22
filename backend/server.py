@@ -93,6 +93,8 @@ EMBED_JS = '''
 (function() {
   "use strict";
 
+  console.log("[VD] embed executed");
+
   // Get script element and configuration
   var scriptEl = document.currentScript || (function() {
     var scripts = document.getElementsByTagName("script");
