@@ -382,12 +382,14 @@ async def get_embed_script():
 # Include the router in the main app
 app.include_router(api_router)
 
+# CORS configuration - allow all origins for embed script usage
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
+    allow_credentials=False,  # Must be False when using allow_origins=["*"]
+    allow_origins=["*"],  # Allow all origins for embed.js cross-origin requests
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Configure logging
