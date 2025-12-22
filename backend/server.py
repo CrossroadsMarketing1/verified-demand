@@ -238,15 +238,16 @@ EMBED_JS = '''
 '''
 
 
-@api_router.get("/embed.js")
+@api_router.get("/embed.js", response_class=PlainTextResponse)
 async def get_embed_script():
     """Serve the embed.js tracking script"""
-    return Response(
+    return PlainTextResponse(
         content=EMBED_JS,
-        media_type="application/javascript",
+        media_type="application/javascript; charset=utf-8",
         headers={
             "Cache-Control": "public, max-age=3600",
-            "Access-Control-Allow-Origin": "*"
+            "Access-Control-Allow-Origin": "*",
+            "X-Content-Type-Options": "nosniff"
         }
     )
 
