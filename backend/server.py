@@ -162,6 +162,113 @@ EMBED_JS = '''
     }
   }
 
+  // Modal state
+  var modalOverlay = null;
+  var modalContainer = null;
+  var currentVehicleData = null;
+
+  // Create modal DOM elements
+  function createModal() {
+    if (modalOverlay) return;
+
+    // Overlay
+    modalOverlay = document.createElement("div");
+    modalOverlay.id = "vd-modal-overlay";
+    modalOverlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:999999;display:none;align-items:center;justify-content:center;";
+
+    // Container
+    modalContainer = document.createElement("div");
+    modalContainer.id = "vd-modal-container";
+    modalContainer.style.cssText = "background:#fff;border-radius:12px;max-width:500px;width:90%;max-height:90vh;overflow:auto;position:relative;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);";
+
+    // Close on overlay click
+    modalOverlay.addEventListener("click", function(e) {
+      if (e.target === modalOverlay) {
+        closeModal();
+      }
+    });
+
+    // Close on Escape key
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape" && modalOverlay.style.display === "flex") {
+        closeModal();
+      }
+    });
+
+    modalOverlay.appendChild(modalContainer);
+    document.body.appendChild(modalOverlay);
+  }
+
+  // Open modal with vehicle data
+  function openModal(vehicleData) {
+    console.log("[VerifiedDemand] openModal called with:", vehicleData);
+    
+    createModal();
+    currentVehicleData = vehicleData || {};
+
+    // Track modal open event
+    trackEvent("modal_open", currentVehicleData);
+
+    // Build modal content
+    var title = currentVehicleData.title || currentVehicleData.vehicleTitle || "Get Verified Price";
+    var subtitle = currentVehicleData.subtitle || "Enter your details to unlock the instant price";
+
+    modalContainer.innerHTML = 
+      '<div style="padding:24px;">' +
+        '<button id="vd-close-btn" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:24px;cursor:pointer;color:#666;">&times;</button>' +
+        '<h2 style="margin:0 0 8px 0;font-size:22px;font-weight:600;color:#111;">' + title + '</h2>' +
+        '<p style="margin:0 0 20px 0;color:#666;font-size:14px;">' + subtitle + '</p>' +
+        '<form id="vd-lead-form">' +
+          '<input type="text" name="name" placeholder="Full Name" required style="width:100%;padding:12px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
+          '<input type="email" name="email" placeholder="Email Address" required style="width:100%;padding:12px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
+          '<input type="tel" name="phone" placeholder="Phone Number" required style="width:100%;padding:12px;margin-bottom:16px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
+          '<button type="submit" style="width:100%;padding:14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Unlock Price</button>' +
+        '</form>' +
+      '</div>';
+
+    // Attach close button handler
+    document.getElementById("vd-close-btn").addEventListener("click", closeModal);
+
+    // Attach form submit handler
+    document.getElementById("vd-lead-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      var formData = new FormData(e.target);
+      var leadData = {
+        name: formData.get("name"),
+        email: formData.get("email"),
+        phone: formData.get("phone"),
+        vehicle: currentVehicleData
+      };
+      
+      trackEvent("lead_submit", leadData);
+      log("Lead submitted:", leadData);
+
+      // Show success message
+      modalContainer.innerHTML = 
+        '<div style="padding:40px;text-align:center;">' +
+          '<div style="font-size:48px;margin-bottom:16px;">✓</div>' +
+          '<h2 style="margin:0 0 8px 0;font-size:22px;font-weight:600;color:#111;">Thank You!</h2>' +
+          '<p style="margin:0 0 20px 0;color:#666;font-size:14px;">We will contact you shortly with your verified price.</p>' +
+          '<button id="vd-done-btn" style="padding:12px 32px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Done</button>' +
+        '</div>';
+
+      document.getElementById("vd-done-btn").addEventListener("click", closeModal);
+    });
+
+    // Show modal
+    modalOverlay.style.display = "flex";
+    log("Modal opened");
+  }
+
+  // Close modal
+  function closeModal() {
+    if (modalOverlay) {
+      modalOverlay.style.display = "none";
+      trackEvent("modal_close", currentVehicleData);
+      log("Modal closed");
+    }
+  }
+
   /**
    * EVENT DELEGATION - Critical for React/Lovable dynamic elements
    * 
@@ -190,31 +297,38 @@ EMBED_JS = '''
       var trackableEl = findTrackableElement(e.target);
       
       if (trackableEl) {
-        console.log("[VD] trigger detected", trackableEl);
+        console.log("[VerifiedDemand] trigger detected - opening modal");
         
         var trackId = trackableEl.getAttribute("data-vd-trigger");
-        var trackData = trackableEl.getAttribute("data-track-data");
+        var trackData = trackableEl.getAttribute("data-vd-vehicle") || trackableEl.getAttribute("data-track-data");
         
         log("Click detected on:", trackId);
         log("Element:", trackableEl.tagName, trackableEl.innerText || "");
 
-        var eventData = {
+        var vehicleData = {
           trackId: trackId,
           elementTag: trackableEl.tagName,
           elementText: (trackableEl.innerText || trackableEl.textContent || "").substring(0, 100),
-          elementId: trackableEl.id || null,
-          elementClass: trackableEl.className || null
+          elementId: trackableEl.id || null
         };
 
+        // Parse vehicle data if provided
         if (trackData) {
           try {
-            eventData.customData = JSON.parse(trackData);
+            var parsed = JSON.parse(trackData);
+            for (var key in parsed) {
+              vehicleData[key] = parsed[key];
+            }
           } catch (parseErr) {
-            eventData.customData = trackData;
+            vehicleData.rawData = trackData;
           }
         }
 
-        trackEvent("click", eventData);
+        // Track the click
+        trackEvent("unlock_click", vehicleData);
+        
+        // Open the modal
+        openModal(vehicleData);
       }
     } catch (err) {
       console.error("[VD] click handler exception", err);
@@ -239,9 +353,12 @@ EMBED_JS = '''
   // Expose global API
   window.VerifiedDemand = {
     track: trackEvent,
-    config: config
+    config: config,
+    openModal: openModal,
+    closeModal: closeModal
   };
 
+  console.log("[VerifiedDemand] embed loaded - openModal:", typeof window.VerifiedDemand.openModal);
   log("Ready - tracking dynamically-rendered elements via event delegation");
 
 })();
