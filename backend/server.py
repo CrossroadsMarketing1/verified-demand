@@ -173,7 +173,7 @@ EMBED_JS = '''
     var maxDepth = 10;
     var depth = 0;
     while (el && el !== document && depth < maxDepth) {
-      if (el.hasAttribute && el.hasAttribute("data-track-click")) {
+      if (el.hasAttribute && el.hasAttribute("data-vd-trigger")) {
         return el;
       }
       el = el.parentElement;
@@ -184,32 +184,40 @@ EMBED_JS = '''
 
   // Use capture phase (true) for earliest interception
   document.addEventListener("click", function(e) {
-    var trackableEl = findTrackableElement(e.target);
-    
-    if (trackableEl) {
-      var trackId = trackableEl.getAttribute("data-track-click");
-      var trackData = trackableEl.getAttribute("data-track-data");
+    try {
+      console.log("[VD] click captured", e.target);
       
-      log("Click detected on:", trackId);
-      log("Element:", trackableEl.tagName, trackableEl.innerText || "");
+      var trackableEl = findTrackableElement(e.target);
+      
+      if (trackableEl) {
+        console.log("[VD] trigger detected", trackableEl);
+        
+        var trackId = trackableEl.getAttribute("data-vd-trigger");
+        var trackData = trackableEl.getAttribute("data-track-data");
+        
+        log("Click detected on:", trackId);
+        log("Element:", trackableEl.tagName, trackableEl.innerText || "");
 
-      var eventData = {
-        trackId: trackId,
-        elementTag: trackableEl.tagName,
-        elementText: (trackableEl.innerText || trackableEl.textContent || "").substring(0, 100),
-        elementId: trackableEl.id || null,
-        elementClass: trackableEl.className || null
-      };
+        var eventData = {
+          trackId: trackId,
+          elementTag: trackableEl.tagName,
+          elementText: (trackableEl.innerText || trackableEl.textContent || "").substring(0, 100),
+          elementId: trackableEl.id || null,
+          elementClass: trackableEl.className || null
+        };
 
-      if (trackData) {
-        try {
-          eventData.customData = JSON.parse(trackData);
-        } catch (e) {
-          eventData.customData = trackData;
+        if (trackData) {
+          try {
+            eventData.customData = JSON.parse(trackData);
+          } catch (parseErr) {
+            eventData.customData = trackData;
+          }
         }
-      }
 
-      trackEvent("click", eventData);
+        trackEvent("click", eventData);
+      }
+    } catch (err) {
+      console.error("[VD] click handler exception", err);
     }
   }, true);
 
