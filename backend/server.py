@@ -78,6 +78,26 @@ class TrackEvent(BaseModel):
     data: Optional[Any] = None
 
 
+# Lead submission model
+class VehicleLead(BaseModel):
+    publicKey: str
+    name: str
+    email: str
+    phone: str
+    vehicle: Optional[Any] = None
+    url: Optional[str] = None
+    referrer: Optional[str] = None
+
+
+# CORS headers for public endpoints
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400",
+}
+
+
 @api_router.post("/track")
 async def track_event(event: TrackEvent):
     """Receive tracking events from embed.js"""
@@ -85,20 +105,60 @@ async def track_event(event: TrackEvent):
     doc['server_timestamp'] = datetime.now(timezone.utc).isoformat()
     await db.tracking_events.insert_one(doc)
     logger.info(f"Tracked event: {event.event} for key: {event.publicKey}")
-    return {"status": "ok"}
+    return Response(
+        content='{"status":"ok"}',
+        media_type="application/json",
+        headers=CORS_HEADERS
+    )
 
 
 @api_router.options("/track")
 async def track_options():
     """Handle CORS preflight for /api/track"""
+    return Response(status_code=200, headers=CORS_HEADERS)
+
+
+# Public endpoints for embed.js
+@api_router.post("/public/track")
+async def public_track_event(event: TrackEvent):
+    """Public tracking endpoint for embed.js"""
+    doc = event.model_dump()
+    doc['server_timestamp'] = datetime.now(timezone.utc).isoformat()
+    await db.tracking_events.insert_one(doc)
+    logger.info(f"Public tracked event: {event.event} for key: {event.publicKey}")
     return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-        }
+        content='{"status":"ok"}',
+        media_type="application/json",
+        headers=CORS_HEADERS
     )
+
+
+@api_router.options("/public/track")
+async def public_track_options():
+    """Handle CORS preflight for /api/public/track"""
+    return Response(status_code=200, headers=CORS_HEADERS)
+
+
+@api_router.post("/public/vehicle-lead")
+async def submit_vehicle_lead(lead: VehicleLead):
+    """Receive lead submissions from embed.js modal"""
+    doc = lead.model_dump()
+    doc['id'] = str(uuid.uuid4())
+    doc['server_timestamp'] = datetime.now(timezone.utc).isoformat()
+    doc['status'] = 'new'
+    await db.vehicle_leads.insert_one(doc)
+    logger.info(f"Lead submitted: {lead.email} for key: {lead.publicKey}")
+    return Response(
+        content='{"status":"ok","message":"Lead received"}',
+        media_type="application/json",
+        headers=CORS_HEADERS
+    )
+
+
+@api_router.options("/public/vehicle-lead")
+async def vehicle_lead_options():
+    """Handle CORS preflight for /api/public/vehicle-lead"""
+    return Response(status_code=200, headers=CORS_HEADERS)
 
 
 # Embed.js script - served from /api/embed.js
