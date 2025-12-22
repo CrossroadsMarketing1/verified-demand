@@ -307,12 +307,37 @@ EMBED_JS = '''
       e.preventDefault();
       var formData = new FormData(e.target);
       var leadData = {
+        publicKey: config.publicKey,
         name: formData.get("name"),
         email: formData.get("email"),
         phone: formData.get("phone"),
-        vehicle: currentVehicleData
+        vehicle: currentVehicleData,
+        url: window.location.href,
+        referrer: document.referrer
       };
       
+      // Submit lead to dedicated endpoint
+      console.log("[VerifiedDemand] Submitting lead:", leadData);
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", config.endpoint + "/api/public/vehicle-lead", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function() {
+          if (xhr.readyState === 4) {
+            if (xhr.status === 200) {
+              console.log("[VerifiedDemand] Lead submitted successfully");
+              log("Lead submitted successfully");
+            } else {
+              console.error("[VerifiedDemand] Lead submission failed:", xhr.status, xhr.responseText);
+            }
+          }
+        };
+        xhr.send(JSON.stringify(leadData));
+      } catch (err) {
+        console.error("[VerifiedDemand] Lead submission error:", err);
+      }
+      
+      // Also track the event
       trackEvent("lead_submit", leadData);
       log("Lead submitted:", leadData);
 
