@@ -88,6 +88,19 @@ async def track_event(event: TrackEvent):
     return {"status": "ok"}
 
 
+@api_router.options("/track")
+async def track_options():
+    """Handle CORS preflight for /api/track"""
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        }
+    )
+
+
 # Embed.js script - served from /api/embed.js
 EMBED_JS = '''
 (function() {
