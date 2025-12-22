@@ -371,7 +371,7 @@ EMBED_JS = '''
     closeModal: closeModal
   };
 
-  console.log("[VerifiedDemand] embed loaded - openModal:", typeof window.VerifiedDemand.openModal);
+  console.log("[VerifiedDemand] embed loaded. openModal type:", typeof window.VerifiedDemand?.openModal);
   log("Ready - tracking dynamically-rendered elements via event delegation");
 
 })();
