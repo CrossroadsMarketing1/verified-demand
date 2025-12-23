@@ -251,12 +251,21 @@ const EventsTable = ({ events, loading, total, skip, limit, onPageChange, eventT
 // Main Dashboard Component
 const Dashboard = () => {
   // State
-  const [publicKey, setPublicKey] = useState("");
-  const [inputKey, setInputKey] = useState("");
+  const [publicKey, setPublicKey] = useState(() => {
+    // Load from localStorage if available
+    return localStorage.getItem("vd_selected_site") || "";
+  });
+  const [inputKey, setInputKey] = useState(() => {
+    return localStorage.getItem("vd_selected_site") || "";
+  });
   const [dateRange, setDateRange] = useState("7d");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [activeTab, setActiveTab] = useState("leads");
+  
+  // Sites state
+  const [sites, setSites] = useState([]);
+  const [selectedSiteId, setSelectedSiteId] = useState("");
   
   // Data state
   const [summary, setSummary] = useState(null);
@@ -275,6 +284,41 @@ const Dashboard = () => {
   // Loading/error state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Fetch sites on mount
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        const response = await axios.get(`${API}/dashboard/sites`);
+        setSites(response.data.sites || []);
+        
+        // If we have a saved key, try to find the matching site
+        const savedKey = localStorage.getItem("vd_selected_site");
+        if (savedKey) {
+          const matchingSite = response.data.sites?.find(s => s.public_key === savedKey);
+          if (matchingSite) {
+            setSelectedSiteId(matchingSite.public_key);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching sites:", err);
+      }
+    };
+    fetchSites();
+  }, []);
+  
+  // Handle site selection from dropdown
+  const handleSiteSelect = (e) => {
+    const siteKey = e.target.value;
+    setSelectedSiteId(siteKey);
+    if (siteKey) {
+      setInputKey(siteKey);
+      setPublicKey(siteKey);
+      setLeadsSkip(0);
+      setEventsSkip(0);
+      localStorage.setItem("vd_selected_site", siteKey);
+    }
+  };
   
   // Get date range params
   const getDateParams = useCallback(() => {
