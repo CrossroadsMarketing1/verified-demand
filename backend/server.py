@@ -699,3 +699,29 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+@app.on_event("startup")
+async def create_indexes():
+    """Create MongoDB indexes for performance"""
+    try:
+        # Index for tracking_events
+        await db.tracking_events.create_index([
+            ("publicKey", 1),
+            ("server_timestamp", -1),
+            ("event", 1)
+        ])
+        await db.tracking_events.create_index([
+            ("publicKey", 1),
+            ("timestamp", -1)
+        ])
+        
+        # Index for vehicle_leads
+        await db.vehicle_leads.create_index([
+            ("publicKey", 1),
+            ("server_timestamp", -1)
+        ])
+        
+        logger.info("MongoDB indexes created successfully")
+    except Exception as e:
+        logger.error(f"Error creating indexes: {e}")
