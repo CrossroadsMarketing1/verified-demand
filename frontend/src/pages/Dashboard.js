@@ -446,6 +446,13 @@ const Dashboard = () => {
                   placeholder="Enter your public key"
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 />
+                <button
+                  onClick={useTestKey}
+                  className="px-3 py-2 text-sm bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 whitespace-nowrap"
+                  title="Use test public key"
+                >
+                  Use Test Key
+                </button>
                 {publicKey && (
                   <button
                     onClick={copyPublicKey}
