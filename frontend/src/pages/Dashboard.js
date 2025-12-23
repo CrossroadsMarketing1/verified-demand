@@ -411,6 +411,15 @@ const Dashboard = () => {
     navigator.clipboard.writeText(publicKey);
   };
   
+  // Use test key
+  const useTestKey = () => {
+    const testKey = "ef0f22841f1cbb777784ee71665c06d0";
+    setInputKey(testKey);
+    setPublicKey(testKey);
+    setLeadsSkip(0);
+    setEventsSkip(0);
+  };
+  
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
