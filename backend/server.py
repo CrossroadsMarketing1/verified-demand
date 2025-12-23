@@ -190,55 +190,172 @@ def parse_date(date_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def build_public_key_filter(key: str) -> dict:
+    """Build filter that matches either publicKey or public_key field"""
+    return {"$or": [{"publicKey": key}, {"public_key": key}]}
+
+
+def build_timestamp_filter(start_date: datetime, end_date: datetime) -> dict:
+    """Build filter that matches any timestamp field within range"""
+    start_iso = start_date.isoformat()
+    end_iso = end_date.isoformat()
+    return {
+        "$or": [
+            {"timestamp": {"$gte": start_iso, "$lte": end_iso}},
+            {"server_timestamp": {"$gte": start_iso, "$lte": end_iso}},
+            {"created_at": {"$gte": start_iso, "$lte": end_iso}}
+        ]
+    }
+
+
+def build_event_type_filter(event_types: list) -> dict:
+    """Build filter that matches event OR event_type field"""
+    return {
+        "$or": [
+            {"event": {"$in": event_types}},
+            {"event_type": {"$in": event_types}}
+        ]
+    }
+
+
+def normalize_lead(doc: dict) -> dict:
+    """Normalize lead document fields for consistent response"""
+    item = serialize_doc(doc)
+    # Normalize public_key
+    item['public_key'] = item.get('publicKey') or item.get('public_key')
+    # Normalize timestamp
+    item['timestamp'] = item.get('server_timestamp') or item.get('timestamp') or item.get('created_at')
+    item['created_at'] = item['timestamp']
+    # Normalize source URL
+    item['source_url'] = item.get('url') or item.get('source_url') or item.get('page_url')
+    return item
+
+
+def normalize_event(doc: dict) -> dict:
+    """Normalize event document fields for consistent response"""
+    item = serialize_doc(doc)
+    # Normalize public_key
+    item['public_key'] = item.get('publicKey') or item.get('public_key')
+    # Normalize event_type
+    item['event_type'] = item.get('event') or item.get('event_type')
+    # Normalize timestamp
+    item['timestamp'] = item.get('server_timestamp') or item.get('timestamp') or item.get('created_at')
+    # Normalize data
+    item['custom_data'] = item.get('data') or item.get('custom_data')
+    return item
+
+
+def redact_pii(value: str, show_chars: int = 3) -> str:
+    """Partially redact PII data for debug endpoint"""
+    if not value or len(value) <= show_chars * 2:
+        return "***"
+    return value[:show_chars] + "***" + value[-show_chars:]
+
+
+# Debug endpoint - for development only
+@api_router.get("/dashboard/debug-sample")
+async def debug_sample(
+    collection: str = Query(..., description="Collection name: tracking_events or vehicle_leads")
+):
+    """Development endpoint to inspect stored data shape"""
+    if collection not in ["tracking_events", "vehicle_leads"]:
+        return {"error": "Invalid collection. Use 'tracking_events' or 'vehicle_leads'"}
+    
+    coll = db[collection]
+    
+    # Get 3 most recent documents
+    cursor = coll.find({}).sort([("server_timestamp", -1), ("timestamp", -1), ("_id", -1)]).limit(3)
+    docs = await cursor.to_list(length=3)
+    
+    # Collect all unique keys across documents
+    all_keys = set()
+    samples = []
+    
+    for doc in docs:
+        serialized = serialize_doc(doc)
+        all_keys.update(serialized.keys())
+        
+        # Redact PII fields
+        if 'email' in serialized and serialized['email']:
+            serialized['email'] = redact_pii(str(serialized['email']))
+        if 'phone' in serialized and serialized['phone']:
+            serialized['phone'] = redact_pii(str(serialized['phone']))
+        if 'name' in serialized and serialized['name']:
+            serialized['name'] = redact_pii(str(serialized['name']))
+            
+        samples.append(serialized)
+    
+    return {
+        "collection": collection,
+        "sample_count": len(samples),
+        "top_level_keys": sorted(list(all_keys)),
+        "samples": samples
+    }
+
+
 @api_router.get("/dashboard/summary")
 async def get_dashboard_summary(
-    public_key: str = Query(..., description="Public key to filter by"),
+    public_key: Optional[str] = Query(None, alias="public_key", description="Public key to filter by"),
+    publicKey: Optional[str] = Query(None, description="Public key (alternative param name)"),
     start: Optional[str] = Query(None, description="Start date (ISO format)"),
     end: Optional[str] = Query(None, description="End date (ISO format)")
 ):
     """Get summary statistics for a public key"""
     
+    # Accept either public_key or publicKey parameter
+    key = public_key or publicKey
+    if not key:
+        return {"error": "public_key parameter is required"}
+    
     # Parse dates, default to last 7 days
     end_date = parse_date(end) or datetime.now(timezone.utc)
     start_date = parse_date(start) or (end_date - timedelta(days=7))
     
-    # Build date filter - handle both string and datetime formats in DB
-    date_filter_events = {
-        "publicKey": public_key,
-        "$or": [
-            {"timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}},
-            {"server_timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}}
-        ]
-    }
+    # Build flexible filters
+    key_filter = build_public_key_filter(key)
+    time_filter = build_timestamp_filter(start_date, end_date)
     
-    date_filter_leads = {
-        "publicKey": public_key,
-        "$or": [
-            {"server_timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}},
-            {"timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}}
-        ]
-    }
+    # Base filter combining key and time
+    base_events_filter = {"$and": [key_filter, time_filter]}
+    base_leads_filter = {"$and": [key_filter, time_filter]}
     
-    # Count vehicle views
+    # Count vehicle views (pageview, vehicle_view)
+    view_event_types = ["vehicle_view", "pageview"]
     vehicle_views = await db.tracking_events.count_documents({
-        **date_filter_events,
-        "event": {"$in": ["vehicle_view", "pageview"]}
+        "$and": [
+            key_filter,
+            time_filter,
+            build_event_type_filter(view_event_types)
+        ]
     })
     
-    # Count unlock clicks
+    # Count unlock clicks (various naming conventions)
+    click_event_types = [
+        "unlock_click", "unlock-click", "unlock_price", "unlock-price",
+        "vd_trigger_click", "trigger_click", "click"
+    ]
     unlock_clicks = await db.tracking_events.count_documents({
-        **date_filter_events,
-        "event": {"$in": ["unlock_click", "unlock_price", "vd_trigger_click"]}
+        "$and": [
+            key_filter,
+            time_filter,
+            build_event_type_filter(click_event_types)
+        ]
     })
     
     # Count leads
-    total_leads = await db.vehicle_leads.count_documents(date_filter_leads)
+    total_leads = await db.vehicle_leads.count_documents(base_leads_filter)
     
-    # Count total events
-    total_events = await db.tracking_events.count_documents(date_filter_events)
+    # Count total events (without date filter being too strict - try simpler query first)
+    total_events = await db.tracking_events.count_documents(base_events_filter)
+    
+    # If no events found with time filter, try without time filter to see if data exists
+    if total_events == 0:
+        total_events_no_time = await db.tracking_events.count_documents(key_filter)
+        if total_events_no_time > 0:
+            logger.info(f"Found {total_events_no_time} events for key {key} outside date range")
     
     return {
-        "public_key": public_key,
+        "public_key": key,
         "date_range": {
             "start": start_date.isoformat(),
             "end": end_date.isoformat()
@@ -252,7 +369,8 @@ async def get_dashboard_summary(
 
 @api_router.get("/dashboard/leads")
 async def get_dashboard_leads(
-    public_key: str = Query(..., description="Public key to filter by"),
+    public_key: Optional[str] = Query(None, alias="public_key", description="Public key to filter by"),
+    publicKey: Optional[str] = Query(None, description="Public key (alternative param name)"),
     start: Optional[str] = Query(None, description="Start date (ISO format)"),
     end: Optional[str] = Query(None, description="End date (ISO format)"),
     limit: int = Query(50, ge=1, le=500, description="Number of results"),
@@ -260,34 +378,45 @@ async def get_dashboard_leads(
 ):
     """Get leads for a public key with pagination"""
     
-    # Parse dates
-    end_date = parse_date(end) or datetime.now(timezone.utc)
-    start_date = parse_date(start) or (end_date - timedelta(days=30))
+    # Accept either public_key or publicKey parameter
+    key = public_key or publicKey
+    if not key:
+        return {"error": "public_key parameter is required", "leads": [], "total": 0}
     
-    # Build query
-    query = {
-        "publicKey": public_key,
-        "$or": [
-            {"server_timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}},
-            {"timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}}
-        ]
-    }
+    # Parse dates - default to last 90 days for leads to capture more data
+    end_date = parse_date(end) or datetime.now(timezone.utc)
+    start_date = parse_date(start) or (end_date - timedelta(days=90))
+    
+    # Build flexible filters
+    key_filter = build_public_key_filter(key)
+    time_filter = build_timestamp_filter(start_date, end_date)
+    
+    # Combined query
+    query = {"$and": [key_filter, time_filter]}
     
     # Get total count
     total_count = await db.vehicle_leads.count_documents(query)
     
-    # Get leads sorted by newest first
-    cursor = db.vehicle_leads.find(query).sort("server_timestamp", -1).skip(skip).limit(limit)
+    # If no results with time filter, try without time filter
+    if total_count == 0:
+        total_without_time = await db.vehicle_leads.count_documents(key_filter)
+        if total_without_time > 0:
+            # Use key filter only if time filter returns nothing
+            query = key_filter
+            total_count = total_without_time
+            logger.info(f"Using key-only filter, found {total_count} leads for key {key}")
+    
+    # Get leads sorted by newest first (try multiple sort fields)
+    cursor = db.vehicle_leads.find(query).sort([
+        ("server_timestamp", -1), 
+        ("timestamp", -1),
+        ("created_at", -1),
+        ("_id", -1)
+    ]).skip(skip).limit(limit)
     leads = await cursor.to_list(length=limit)
     
-    # Serialize leads
-    serialized_leads = []
-    for lead in leads:
-        item = serialize_doc(lead)
-        # Normalize field names for frontend
-        item['created_at'] = item.get('server_timestamp') or item.get('timestamp')
-        item['source_url'] = item.get('url') or item.get('source_url') or item.get('page_url')
-        serialized_leads.append(item)
+    # Normalize leads for consistent response
+    serialized_leads = [normalize_lead(lead) for lead in leads]
     
     return {
         "leads": serialized_leads,
@@ -299,7 +428,8 @@ async def get_dashboard_leads(
 
 @api_router.get("/dashboard/events")
 async def get_dashboard_events(
-    public_key: str = Query(..., description="Public key to filter by"),
+    public_key: Optional[str] = Query(None, alias="public_key", description="Public key to filter by"),
+    publicKey: Optional[str] = Query(None, description="Public key (alternative param name)"),
     event_type: Optional[str] = Query(None, description="Filter by event type"),
     start: Optional[str] = Query(None, description="Start date (ISO format)"),
     end: Optional[str] = Query(None, description="End date (ISO format)"),
@@ -308,38 +438,53 @@ async def get_dashboard_events(
 ):
     """Get tracking events for a public key with pagination"""
     
-    # Parse dates
+    # Accept either public_key or publicKey parameter
+    key = public_key or publicKey
+    if not key:
+        return {"error": "public_key parameter is required", "events": [], "total": 0}
+    
+    # Parse dates - default to last 90 days
     end_date = parse_date(end) or datetime.now(timezone.utc)
-    start_date = parse_date(start) or (end_date - timedelta(days=30))
+    start_date = parse_date(start) or (end_date - timedelta(days=90))
     
-    # Build query
-    query = {
-        "publicKey": public_key,
-        "$or": [
-            {"timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}},
-            {"server_timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}}
-        ]
-    }
+    # Build flexible filters
+    key_filter = build_public_key_filter(key)
+    time_filter = build_timestamp_filter(start_date, end_date)
     
+    # Combined query
+    query = {"$and": [key_filter, time_filter]}
+    
+    # Add event type filter if specified (match both field names)
     if event_type:
-        query["event"] = event_type
+        query["$and"].append({
+            "$or": [{"event": event_type}, {"event_type": event_type}]
+        })
     
     # Get total count
     total_count = await db.tracking_events.count_documents(query)
     
+    # If no results with time filter, try without time filter
+    if total_count == 0:
+        simple_query = key_filter.copy()
+        if event_type:
+            simple_query = {"$and": [key_filter, {"$or": [{"event": event_type}, {"event_type": event_type}]}]}
+        total_without_time = await db.tracking_events.count_documents(simple_query)
+        if total_without_time > 0:
+            query = simple_query
+            total_count = total_without_time
+            logger.info(f"Using key-only filter, found {total_count} events for key {key}")
+    
     # Get events sorted by newest first
-    cursor = db.tracking_events.find(query).sort([("server_timestamp", -1), ("timestamp", -1)]).skip(skip).limit(limit)
+    cursor = db.tracking_events.find(query).sort([
+        ("server_timestamp", -1), 
+        ("timestamp", -1),
+        ("created_at", -1),
+        ("_id", -1)
+    ]).skip(skip).limit(limit)
     events = await cursor.to_list(length=limit)
     
-    # Serialize events
-    serialized_events = []
-    for event in events:
-        item = serialize_doc(event)
-        # Normalize field names
-        item['event_type'] = item.get('event')
-        item['timestamp'] = item.get('server_timestamp') or item.get('timestamp')
-        item['custom_data'] = item.get('data')
-        serialized_events.append(item)
+    # Normalize events for consistent response
+    serialized_events = [normalize_event(event) for event in events]
     
     return {
         "events": serialized_events,
@@ -351,11 +496,28 @@ async def get_dashboard_events(
 
 @api_router.get("/dashboard/event-types")
 async def get_event_types(
-    public_key: str = Query(..., description="Public key to filter by")
+    public_key: Optional[str] = Query(None, alias="public_key", description="Public key to filter by"),
+    publicKey: Optional[str] = Query(None, description="Public key (alternative param name)")
 ):
     """Get distinct event types for a public key"""
-    event_types = await db.tracking_events.distinct("event", {"publicKey": public_key})
-    return {"event_types": event_types}
+    
+    # Accept either public_key or publicKey parameter
+    key = public_key or publicKey
+    if not key:
+        return {"event_types": []}
+    
+    key_filter = build_public_key_filter(key)
+    
+    # Get distinct values from both possible field names
+    event_types_1 = await db.tracking_events.distinct("event", key_filter)
+    event_types_2 = await db.tracking_events.distinct("event_type", key_filter)
+    
+    # Combine and dedupe
+    all_types = list(set(event_types_1 + event_types_2))
+    # Filter out None values
+    all_types = [t for t in all_types if t is not None]
+    
+    return {"event_types": sorted(all_types)}
 
 
 # ============================================
