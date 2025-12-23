@@ -161,7 +161,206 @@ async def vehicle_lead_options():
     return Response(status_code=200, headers=CORS_HEADERS)
 
 
+# ============================================
+# Dashboard API Endpoints (Read-Only)
+# ============================================
+
+def serialize_doc(doc):
+    """Convert MongoDB document to JSON-serializable format"""
+    if doc is None:
+        return None
+    result = {}
+    for key, value in doc.items():
+        if key == '_id':
+            result['_id'] = str(value)
+        elif isinstance(value, datetime):
+            result[key] = value.isoformat()
+        else:
+            result[key] = value
+    return result
+
+
+def parse_date(date_str: Optional[str]) -> Optional[datetime]:
+    """Parse ISO date string to datetime"""
+    if not date_str:
+        return None
+    try:
+        return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+    except:
+        return None
+
+
+@api_router.get("/dashboard/summary")
+async def get_dashboard_summary(
+    public_key: str = Query(..., description="Public key to filter by"),
+    start: Optional[str] = Query(None, description="Start date (ISO format)"),
+    end: Optional[str] = Query(None, description="End date (ISO format)")
+):
+    """Get summary statistics for a public key"""
+    
+    # Parse dates, default to last 7 days
+    end_date = parse_date(end) or datetime.now(timezone.utc)
+    start_date = parse_date(start) or (end_date - timedelta(days=7))
+    
+    # Build date filter - handle both string and datetime formats in DB
+    date_filter_events = {
+        "publicKey": public_key,
+        "$or": [
+            {"timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}},
+            {"server_timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}}
+        ]
+    }
+    
+    date_filter_leads = {
+        "publicKey": public_key,
+        "$or": [
+            {"server_timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}},
+            {"timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}}
+        ]
+    }
+    
+    # Count vehicle views
+    vehicle_views = await db.tracking_events.count_documents({
+        **date_filter_events,
+        "event": {"$in": ["vehicle_view", "pageview"]}
+    })
+    
+    # Count unlock clicks
+    unlock_clicks = await db.tracking_events.count_documents({
+        **date_filter_events,
+        "event": {"$in": ["unlock_click", "unlock_price", "vd_trigger_click"]}
+    })
+    
+    # Count leads
+    total_leads = await db.vehicle_leads.count_documents(date_filter_leads)
+    
+    # Count total events
+    total_events = await db.tracking_events.count_documents(date_filter_events)
+    
+    return {
+        "public_key": public_key,
+        "date_range": {
+            "start": start_date.isoformat(),
+            "end": end_date.isoformat()
+        },
+        "total_vehicle_views": vehicle_views,
+        "total_unlock_clicks": unlock_clicks,
+        "total_leads": total_leads,
+        "total_events": total_events
+    }
+
+
+@api_router.get("/dashboard/leads")
+async def get_dashboard_leads(
+    public_key: str = Query(..., description="Public key to filter by"),
+    start: Optional[str] = Query(None, description="Start date (ISO format)"),
+    end: Optional[str] = Query(None, description="End date (ISO format)"),
+    limit: int = Query(50, ge=1, le=500, description="Number of results"),
+    skip: int = Query(0, ge=0, description="Number of results to skip")
+):
+    """Get leads for a public key with pagination"""
+    
+    # Parse dates
+    end_date = parse_date(end) or datetime.now(timezone.utc)
+    start_date = parse_date(start) or (end_date - timedelta(days=30))
+    
+    # Build query
+    query = {
+        "publicKey": public_key,
+        "$or": [
+            {"server_timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}},
+            {"timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}}
+        ]
+    }
+    
+    # Get total count
+    total_count = await db.vehicle_leads.count_documents(query)
+    
+    # Get leads sorted by newest first
+    cursor = db.vehicle_leads.find(query).sort("server_timestamp", -1).skip(skip).limit(limit)
+    leads = await cursor.to_list(length=limit)
+    
+    # Serialize leads
+    serialized_leads = []
+    for lead in leads:
+        item = serialize_doc(lead)
+        # Normalize field names for frontend
+        item['created_at'] = item.get('server_timestamp') or item.get('timestamp')
+        item['source_url'] = item.get('url') or item.get('source_url') or item.get('page_url')
+        serialized_leads.append(item)
+    
+    return {
+        "leads": serialized_leads,
+        "total": total_count,
+        "limit": limit,
+        "skip": skip
+    }
+
+
+@api_router.get("/dashboard/events")
+async def get_dashboard_events(
+    public_key: str = Query(..., description="Public key to filter by"),
+    event_type: Optional[str] = Query(None, description="Filter by event type"),
+    start: Optional[str] = Query(None, description="Start date (ISO format)"),
+    end: Optional[str] = Query(None, description="End date (ISO format)"),
+    limit: int = Query(50, ge=1, le=500, description="Number of results"),
+    skip: int = Query(0, ge=0, description="Number of results to skip")
+):
+    """Get tracking events for a public key with pagination"""
+    
+    # Parse dates
+    end_date = parse_date(end) or datetime.now(timezone.utc)
+    start_date = parse_date(start) or (end_date - timedelta(days=30))
+    
+    # Build query
+    query = {
+        "publicKey": public_key,
+        "$or": [
+            {"timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}},
+            {"server_timestamp": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}}
+        ]
+    }
+    
+    if event_type:
+        query["event"] = event_type
+    
+    # Get total count
+    total_count = await db.tracking_events.count_documents(query)
+    
+    # Get events sorted by newest first
+    cursor = db.tracking_events.find(query).sort([("server_timestamp", -1), ("timestamp", -1)]).skip(skip).limit(limit)
+    events = await cursor.to_list(length=limit)
+    
+    # Serialize events
+    serialized_events = []
+    for event in events:
+        item = serialize_doc(event)
+        # Normalize field names
+        item['event_type'] = item.get('event')
+        item['timestamp'] = item.get('server_timestamp') or item.get('timestamp')
+        item['custom_data'] = item.get('data')
+        serialized_events.append(item)
+    
+    return {
+        "events": serialized_events,
+        "total": total_count,
+        "limit": limit,
+        "skip": skip
+    }
+
+
+@api_router.get("/dashboard/event-types")
+async def get_event_types(
+    public_key: str = Query(..., description="Public key to filter by")
+):
+    """Get distinct event types for a public key"""
+    event_types = await db.tracking_events.distinct("event", {"publicKey": public_key})
+    return {"event_types": event_types}
+
+
+# ============================================
 # Embed.js script - served from /api/embed.js
+# ============================================
 EMBED_JS = '''
 (function() {
   "use strict";
