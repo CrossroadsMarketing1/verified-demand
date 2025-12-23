@@ -521,6 +521,217 @@ async def get_event_types(
 
 
 # ============================================
+# Site Management API Endpoints
+# ============================================
+
+import secrets
+import re
+
+# Site models
+class SiteCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    domain: Optional[str] = Field(None, max_length=253)
+    notification_emails: Optional[List[str]] = Field(default_factory=list)
+
+
+class SiteUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    domain: Optional[str] = Field(None, max_length=253)
+    is_active: Optional[bool] = None
+    notification_emails: Optional[List[str]] = None
+
+
+def generate_public_key() -> str:
+    """Generate a cryptographically secure public key (32 hex chars)"""
+    return secrets.token_hex(16)
+
+
+def validate_domain(domain: str) -> bool:
+    """Basic domain format validation"""
+    if not domain:
+        return True
+    pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'
+    return bool(re.match(pattern, domain))
+
+
+def serialize_site(doc: dict) -> dict:
+    """Serialize site document for API response"""
+    if doc is None:
+        return None
+    result = {}
+    for key, value in doc.items():
+        if key == '_id':
+            result['_id'] = str(value)
+        elif isinstance(value, datetime):
+            result[key] = value.isoformat()
+        else:
+            result[key] = value
+    return result
+
+
+@api_router.post("/dashboard/sites")
+async def create_site(site: SiteCreate):
+    """Create a new site with auto-generated public key"""
+    
+    # Validate domain if provided
+    if site.domain and not validate_domain(site.domain):
+        return {"error": "Invalid domain format"}
+    
+    # Generate unique public key
+    max_attempts = 10
+    public_key = None
+    for _ in range(max_attempts):
+        candidate = generate_public_key()
+        existing = await db.sites.find_one({"public_key": candidate})
+        if not existing:
+            public_key = candidate
+            break
+    
+    if not public_key:
+        return {"error": "Failed to generate unique public key"}
+    
+    now = datetime.now(timezone.utc)
+    
+    doc = {
+        "site_id": f"site_{secrets.token_hex(8)}",
+        "name": site.name,
+        "domain": site.domain,
+        "public_key": public_key,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "is_active": True,
+        "notification_emails": site.notification_emails or [],
+        "previous_public_keys": []
+    }
+    
+    await db.sites.insert_one(doc)
+    logger.info(f"Created site: {site.name} with key: {public_key}")
+    
+    return serialize_site(doc)
+
+
+@api_router.get("/dashboard/sites")
+async def list_sites():
+    """List all sites, newest first"""
+    cursor = db.sites.find({}).sort([("created_at", -1), ("_id", -1)])
+    sites = await cursor.to_list(length=1000)
+    return {"sites": [serialize_site(s) for s in sites]}
+
+
+@api_router.get("/dashboard/sites/{public_key}")
+async def get_site(public_key: str):
+    """Get a single site by public key"""
+    # Check both current and previous keys
+    site = await db.sites.find_one({
+        "$or": [
+            {"public_key": public_key},
+            {"previous_public_keys": public_key}
+        ]
+    })
+    
+    if not site:
+        return {"error": "Site not found"}
+    
+    return serialize_site(site)
+
+
+@api_router.patch("/dashboard/sites/{public_key}")
+async def update_site(public_key: str, update: SiteUpdate):
+    """Update a site's settings"""
+    
+    # Validate domain if provided
+    if update.domain is not None and update.domain and not validate_domain(update.domain):
+        return {"error": "Invalid domain format"}
+    
+    site = await db.sites.find_one({"public_key": public_key})
+    if not site:
+        return {"error": "Site not found"}
+    
+    # Build update document
+    update_doc = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if update.name is not None:
+        update_doc["name"] = update.name
+    if update.domain is not None:
+        update_doc["domain"] = update.domain
+    if update.is_active is not None:
+        update_doc["is_active"] = update.is_active
+    if update.notification_emails is not None:
+        update_doc["notification_emails"] = update.notification_emails
+    
+    await db.sites.update_one(
+        {"public_key": public_key},
+        {"$set": update_doc}
+    )
+    
+    # Fetch and return updated site
+    updated_site = await db.sites.find_one({"public_key": public_key})
+    logger.info(f"Updated site: {public_key}")
+    
+    return serialize_site(updated_site)
+
+
+@api_router.post("/dashboard/sites/{public_key}/rotate-key")
+async def rotate_site_key(public_key: str):
+    """Rotate a site's public key, preserving the old key in history"""
+    
+    site = await db.sites.find_one({"public_key": public_key})
+    if not site:
+        return {"error": "Site not found"}
+    
+    # Generate new unique public key
+    max_attempts = 10
+    new_public_key = None
+    for _ in range(max_attempts):
+        candidate = generate_public_key()
+        existing = await db.sites.find_one({"public_key": candidate})
+        if not existing:
+            new_public_key = candidate
+            break
+    
+    if not new_public_key:
+        return {"error": "Failed to generate new unique public key"}
+    
+    # Update site with new key, preserving old key in history
+    previous_keys = site.get("previous_public_keys", [])
+    previous_keys.append(public_key)
+    
+    await db.sites.update_one(
+        {"public_key": public_key},
+        {
+            "$set": {
+                "public_key": new_public_key,
+                "previous_public_keys": previous_keys,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    # Fetch and return updated site
+    updated_site = await db.sites.find_one({"public_key": new_public_key})
+    logger.info(f"Rotated key for site: {site.get('name')} from {public_key} to {new_public_key}")
+    
+    return {
+        "message": "Key rotated successfully",
+        "old_key": public_key,
+        "new_key": new_public_key,
+        "site": serialize_site(updated_site)
+    }
+
+
+# Helper to resolve site from either key format
+async def resolve_site_by_key(key: str) -> Optional[dict]:
+    """Resolve a site from public_key or publicKey (compatibility)"""
+    site = await db.sites.find_one({
+        "$or": [
+            {"public_key": key},
+            {"previous_public_keys": key}
+        ]
+    })
+    return site
+
+
+# ============================================
 # Embed.js script - served from /api/embed.js
 # ============================================
 EMBED_JS = '''
