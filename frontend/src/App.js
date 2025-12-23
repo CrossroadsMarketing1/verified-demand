@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import axios from "axios";
 import Dashboard from "@/pages/Dashboard";
+import SitesPage from "@/pages/SitesPage";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -45,6 +46,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard/sites" element={<SitesPage />} />
         </Routes>
       </BrowserRouter>
     </div>
