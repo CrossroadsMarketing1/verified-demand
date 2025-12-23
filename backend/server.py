@@ -1095,6 +1095,11 @@ async def create_indexes():
             ("server_timestamp", -1)
         ])
         
+        # Indexes for sites collection
+        await db.sites.create_index("public_key", unique=True)
+        await db.sites.create_index("domain")
+        await db.sites.create_index("created_at")
+        
         logger.info("MongoDB indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
