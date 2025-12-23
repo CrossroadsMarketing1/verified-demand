@@ -431,9 +431,19 @@ const Dashboard = () => {
       setError("Please enter a public key");
       return;
     }
-    setPublicKey(inputKey.trim());
+    const key = inputKey.trim();
+    setPublicKey(key);
     setLeadsSkip(0);
     setEventsSkip(0);
+    localStorage.setItem("vd_selected_site", key);
+    
+    // Update dropdown if the key matches a site
+    const matchingSite = sites.find(s => s.public_key === key);
+    if (matchingSite) {
+      setSelectedSiteId(key);
+    } else {
+      setSelectedSiteId("");
+    }
   };
   
   // Load data when public key changes
@@ -460,16 +470,27 @@ const Dashboard = () => {
     const testKey = "ef0f22841f1cbb777784ee71665c06d0";
     setInputKey(testKey);
     setPublicKey(testKey);
+    setSelectedSiteId("");
     setLeadsSkip(0);
     setEventsSkip(0);
+    localStorage.setItem("vd_selected_site", testKey);
   };
   
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
       <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <h1 className="text-2xl font-bold text-gray-900">VerifiedDemand Dashboard</h1>
+        <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">VerifiedDemand Dashboard</h1>
+            <p className="text-sm text-gray-500 mt-1">Analytics & Lead Tracking</p>
+          </div>
+          <a
+            href="/dashboard/sites"
+            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
+          >
+            Sites / Install
+          </a>
         </div>
       </header>
       
@@ -477,6 +498,27 @@ const Dashboard = () => {
         {/* Filters */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="flex flex-wrap gap-4 items-end">
+            {/* Site Selector */}
+            {sites.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Select Site
+                </label>
+                <select
+                  value={selectedSiteId}
+                  onChange={handleSiteSelect}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 min-w-48"
+                >
+                  <option value="">-- Select a site --</option>
+                  {sites.map(site => (
+                    <option key={site.public_key} value={site.public_key}>
+                      {site.name} {site.domain ? `(${site.domain})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
             {/* Public Key Input */}
             <div className="flex-1 min-w-64">
               <label className="block text-sm font-medium text-gray-700 mb-1">
