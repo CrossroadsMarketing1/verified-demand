@@ -800,10 +800,48 @@ async def request_otp(otp_req: OTPRequest, request: Request):
             headers=CORS_HEADERS
         )
     
+    # Check resend cooldown - must wait 30 seconds between OTP requests for same phone+key
+    now = datetime.now(timezone.utc)
+    recent_otp = await db.otp_verifications.find_one(
+        {
+            "phone": normalized_phone,
+            "public_key": otp_req.public_key,
+            "status": {"$in": ["pending", "sent"]}
+        },
+        sort=[("created_at", -1)]
+    )
+    
+    if recent_otp:
+        last_sent_str = recent_otp.get("last_sent_at") or recent_otp.get("created_at")
+        if last_sent_str:
+            try:
+                last_sent = datetime.fromisoformat(last_sent_str.replace('Z', '+00:00'))
+                if last_sent.tzinfo is None:
+                    last_sent = last_sent.replace(tzinfo=timezone.utc)
+                seconds_since = (now - last_sent).total_seconds()
+                
+                if seconds_since < OTP_RESEND_COOLDOWN:
+                    remaining = int(OTP_RESEND_COOLDOWN - seconds_since)
+                    logger.info(f"OTP resend cooldown for phone {normalized_phone}: {remaining}s remaining")
+                    return Response(
+                        content=json.dumps({
+                            "ok": False,
+                            "error": f"Please wait {remaining} seconds before requesting a new code.",
+                            "cooldown_remaining": remaining
+                        }),
+                        status_code=429,
+                        media_type="application/json",
+                        headers=CORS_HEADERS
+                    )
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Could not parse last_sent_at: {e}")
+    
     # Check if SMS is configured (or development mode for mock)
+    # In production without Twilio, fail early - do NOT create OTP record
     if not is_sms_configured() and not is_development_mode():
+        logger.error("SMS not configured in production - blocking OTP request")
         return Response(
-            content='{"ok":false,"error":"SMS verification is not configured. Please contact support."}',
+            content='{"ok":false,"error":"SMS temporarily unavailable. Please try again later."}',
             status_code=503,
             media_type="application/json",
             headers=CORS_HEADERS
@@ -813,7 +851,6 @@ async def request_otp(otp_req: OTPRequest, request: Request):
     otp_code = generate_otp_code()
     code_hash = hash_otp_code(otp_code)
     
-    now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=OTP_EXPIRY_SECONDS)
     
     # Store OTP verification record
@@ -824,6 +861,7 @@ async def request_otp(otp_req: OTPRequest, request: Request):
         "phone": normalized_phone,
         "code_hash": code_hash,
         "created_at": now.isoformat(),
+        "last_sent_at": now.isoformat(),
         "expires_at": expires_at.isoformat(),
         "attempts": 0,
         "max_attempts": OTP_MAX_ATTEMPTS,
@@ -843,31 +881,45 @@ async def request_otp(otp_req: OTPRequest, request: Request):
     await db.otp_verifications.insert_one(otp_doc)
     
     # Send SMS (or mock in development)
-    sms_message = f"Your verification code is {otp_code}. It expires in 10 minutes."
-    sms_sent, dev_code = await send_sms(normalized_phone, sms_message, otp_code)
+    # Improved SMS content
+    sms_message = f"Your VerifiedDemand verification code is: {otp_code}. Expires in 10 minutes."
+    sms_sent, dev_code, sms_error = await send_sms(normalized_phone, sms_message, otp_code)
     
     if not sms_sent:
-        # Update status to failed
+        # Update status to failed - don't leave broken OTP state
         await db.otp_verifications.update_one(
             {"id": otp_doc["id"]},
-            {"$set": {"status": "failed", "error": "SMS send failed"}}
+            {"$set": {"status": "send_failed", "error": sms_error or "SMS send failed"}}
         )
+        error_msg = sms_error or "Failed to send verification code. Please try again."
         return Response(
-            content='{"ok":false,"error":"Failed to send verification code. Please try again."}',
+            content=json.dumps({"ok": False, "error": error_msg}),
             status_code=500,
             media_type="application/json",
             headers=CORS_HEADERS
         )
     
+    # Update status to sent
+    await db.otp_verifications.update_one(
+        {"id": otp_doc["id"]},
+        {"$set": {"status": "sent"}}
+    )
+    
     logger.info(f"OTP requested for phone {normalized_phone}, key {otp_req.public_key}")
     
-    # Build response - include dev_code only in development mode
+    # Build response - include dev_code ONLY in development mode with mock SMS
     response_data = {
         "ok": True,
         "expires_in": OTP_EXPIRY_SECONDS,
+        "cooldown": OTP_RESEND_COOLDOWN,
         "message": "Verification code sent to your phone."
     }
-    if dev_code and is_development_mode():
+    
+    # SECURITY: Only include dev_code when ALL conditions met:
+    # 1. dev_code was returned (only happens with mock SMS)
+    # 2. ENV is explicitly "development"
+    # 3. Twilio is NOT configured (double check)
+    if dev_code and is_development_mode() and not is_sms_configured():
         response_data["dev_code"] = dev_code
         response_data["message"] = f"[DEV MODE] Code: {dev_code} - Also logged to server console."
     
