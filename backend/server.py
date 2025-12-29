@@ -1150,6 +1150,11 @@ async def update_site(public_key: str, update: SiteUpdate):
         update_doc["is_active"] = update.is_active
     if update.notification_emails is not None:
         update_doc["notification_emails"] = update.notification_emails
+    if update.allowed_domains is not None:
+        # Normalize allowed domains
+        update_doc["allowed_domains"] = [
+            normalize_domain(d) for d in update.allowed_domains if d and d.strip()
+        ]
     
     await db.sites.update_one(
         {"public_key": public_key},
