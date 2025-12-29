@@ -952,6 +952,98 @@ async def rotate_site_key(public_key: str):
     }
 
 
+@api_router.post("/dashboard/sites/{public_key}/send-test-email")
+async def send_test_email(public_key: str):
+    """Send a test email to the site's notification emails"""
+    
+    site = await db.sites.find_one({"public_key": public_key})
+    if not site:
+        return {"success": False, "error": "Site not found"}
+    
+    notification_emails = site.get("notification_emails", [])
+    if not notification_emails:
+        return {"success": False, "error": "No notification emails configured for this site"}
+    
+    if not is_smtp_configured():
+        return {"success": False, "error": "SMTP is not configured. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and SMTP_FROM environment variables."}
+    
+    # Build test email content
+    site_name = site.get("name", "Unknown Site")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    
+    subject = f"✅ Test Email - {site_name}"
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: #10b981; color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
+            .content {{ background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }}
+            .footer {{ text-align: center; padding: 15px; color: #9ca3af; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h2 style="margin: 0;">✅ Test Email Successful!</h2>
+                <p style="margin: 5px 0 0 0; opacity: 0.9;">{site_name}</p>
+            </div>
+            <div class="content">
+                <p>This is a test email from VerifiedDemand to confirm your notification settings are working correctly.</p>
+                
+                <p><strong>Site Details:</strong></p>
+                <ul>
+                    <li><strong>Site Name:</strong> {site_name}</li>
+                    <li><strong>Domain:</strong> {site.get('domain', 'Not set')}</li>
+                    <li><strong>Public Key:</strong> <code>{public_key}</code></li>
+                    <li><strong>Test Sent:</strong> {timestamp}</li>
+                </ul>
+                
+                <p>When a new lead is captured, you will receive an email similar to this one with the lead's contact information.</p>
+            </div>
+            <div class="footer">
+                Powered by VerifiedDemand
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    text_content = f"""
+Test Email Successful!
+======================
+
+This is a test email from VerifiedDemand to confirm your notification settings are working correctly.
+
+Site Details:
+- Site Name: {site_name}
+- Domain: {site.get('domain', 'Not set')}
+- Public Key: {public_key}
+- Test Sent: {timestamp}
+
+When a new lead is captured, you will receive an email similar to this one with the lead's contact information.
+
+---
+Powered by VerifiedDemand
+"""
+    
+    try:
+        success = await send_email_async(notification_emails, subject, html_content, text_content)
+        if success:
+            return {
+                "success": True,
+                "message": f"Test email sent successfully to {', '.join(notification_emails)}"
+            }
+        else:
+            return {"success": False, "error": "Failed to send email. Check server logs for details."}
+    except Exception as e:
+        logger.error(f"Test email error: {e}")
+        return {"success": False, "error": str(e)}
+
+
 # Helper to resolve site from either key format
 async def resolve_site_by_key(key: str) -> Optional[dict]:
     """Resolve a site from public_key or publicKey (compatibility)"""
