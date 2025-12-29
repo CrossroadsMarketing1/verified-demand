@@ -463,18 +463,81 @@ async def public_track_options():
 
 
 @api_router.post("/public/vehicle-lead")
-async def submit_vehicle_lead(lead: VehicleLead, background_tasks: BackgroundTasks):
-    """Receive lead submissions from embed.js modal"""
+async def submit_vehicle_lead(lead: VehicleLead, request: Request, background_tasks: BackgroundTasks):
+    """Receive lead submissions from embed.js modal with anti-spam protection"""
+    
+    # Get client info for rate limiting and logging
+    client_ip = get_client_ip(request)
+    user_agent = request.headers.get("user-agent", "unknown")
+    
+    # Check rate limits
+    ip_key = f"ip:{client_ip}"
+    pk_key = f"pk:{lead.publicKey}"
+    
+    if not check_rate_limit(ip_key, RATE_LIMIT_PER_IP):
+        logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+        return Response(
+            content='{"status":"error","message":"Too many requests. Please try again later."}',
+            status_code=429,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    if not check_rate_limit(pk_key, RATE_LIMIT_PER_KEY):
+        logger.warning(f"Rate limit exceeded for public key: {lead.publicKey}")
+        return Response(
+            content='{"status":"error","message":"Too many requests. Please try again later."}',
+            status_code=429,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    # Check honeypot
+    is_spam = check_honeypot(lead)
+    
+    # Validate and normalize inputs
+    normalized_email, email_valid = validate_email(lead.email)
+    normalized_phone, phone_valid = validate_phone(lead.phone)
+    is_invalid_contact = not email_valid or not phone_valid
+    
+    # Build lead document
     doc = lead.model_dump()
     doc['id'] = str(uuid.uuid4())
     doc['server_timestamp'] = datetime.now(timezone.utc).isoformat()
     doc['status'] = 'new'
+    
+    # Add quality flags
+    doc['is_suspected_spam'] = is_spam
+    doc['is_invalid_contact'] = is_invalid_contact
+    doc['email_valid'] = email_valid
+    doc['phone_valid'] = phone_valid
+    doc['source_ip'] = client_ip
+    doc['source_user_agent'] = user_agent
+    doc['domain_status'] = 'unknown'
+    
+    # Store normalized values
+    doc['email'] = normalized_email
+    doc['phone'] = normalized_phone
+    
+    # Remove honeypot fields from storage (don't need to keep them)
+    doc.pop('company', None)
+    doc.pop('website', None)
+    
+    # Save the lead
     await db.vehicle_leads.insert_one(doc)
-    logger.info(f"Lead submitted: {lead.email} for key: {lead.publicKey}")
     
-    # Send notification email in background (don't block response)
-    background_tasks.add_task(send_lead_notification, doc)
+    if is_spam:
+        logger.warning(f"Suspected spam lead from {client_ip}: {normalized_email}")
+    elif is_invalid_contact:
+        logger.info(f"Lead with invalid contact from {client_ip}: email_valid={email_valid}, phone_valid={phone_valid}")
+    else:
+        logger.info(f"Lead submitted: {normalized_email} for key: {lead.publicKey}")
     
+    # Only send notification if not spam and contact is valid
+    if not is_spam and not is_invalid_contact:
+        background_tasks.add_task(send_lead_notification, doc)
+    
+    # Always return 200 to avoid giving bots feedback
     return Response(
         content='{"status":"ok","message":"Lead received"}',
         media_type="application/json",
