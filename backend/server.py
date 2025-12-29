@@ -1845,6 +1845,7 @@ EMBED_JS = '''
   var modalOverlay = null;
   var modalContainer = null;
   var currentVehicleData = null;
+  var currentLeadData = null;  // Store lead data between steps
 
   // Create modal DOM elements
   function createModal() {
@@ -1878,92 +1879,349 @@ EMBED_JS = '''
     document.body.appendChild(modalOverlay);
   }
 
-  // Open modal with vehicle data
-  function openModal(vehicleData) {
-    console.log("[VerifiedDemand] openModal called with:", vehicleData);
-    
-    createModal();
-    currentVehicleData = vehicleData || {};
+  // Show error message in modal
+  function showError(message) {
+    var errorDiv = document.getElementById("vd-error-msg");
+    if (errorDiv) {
+      errorDiv.textContent = message;
+      errorDiv.style.display = "block";
+    }
+  }
 
-    // Track modal open event
-    trackEvent("modal_open", currentVehicleData);
+  // Hide error message
+  function hideError() {
+    var errorDiv = document.getElementById("vd-error-msg");
+    if (errorDiv) {
+      errorDiv.style.display = "none";
+    }
+  }
 
-    // Build modal content
-    var title = currentVehicleData.title || currentVehicleData.vehicleTitle || "Get Verified Price";
-    var subtitle = currentVehicleData.subtitle || "Enter your details to unlock the instant price";
+  // Show Step 1: Contact Info Form
+  function showStep1() {
+    var title = currentVehicleData.title || currentVehicleData.vehicleTitle || "Unlock Your Price";
+    var subtitle = currentVehicleData.subtitle || "Enter your details to get the verified instant price";
 
     modalContainer.innerHTML = 
       '<div style="padding:24px;">' +
-        '<button id="vd-close-btn" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:24px;cursor:pointer;color:#666;">&times;</button>' +
+        '<button id="vd-close-btn" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:24px;cursor:pointer;color:#666;" aria-label="Close">&times;</button>' +
         '<h2 style="margin:0 0 8px 0;font-size:22px;font-weight:600;color:#111;">' + title + '</h2>' +
         '<p style="margin:0 0 20px 0;color:#666;font-size:14px;">' + subtitle + '</p>' +
-        '<form id="vd-lead-form">' +
-          '<input type="text" name="name" placeholder="Full Name" required style="width:100%;padding:12px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
-          '<input type="email" name="email" placeholder="Email Address" required style="width:100%;padding:12px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
-          '<input type="tel" name="phone" placeholder="Phone Number" required style="width:100%;padding:12px;margin-bottom:16px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
+        '<div id="vd-error-msg" style="display:none;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;color:#dc2626;font-size:13px;margin-bottom:12px;"></div>' +
+        '<form id="vd-step1-form">' +
+          '<input type="text" id="vd-name" name="name" placeholder="Full Name *" required style="width:100%;padding:12px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
+          '<input type="tel" id="vd-phone" name="phone" placeholder="Phone Number *" required style="width:100%;padding:12px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
+          '<input type="email" id="vd-email" name="email" placeholder="Email Address (optional)" style="width:100%;padding:12px;margin-bottom:16px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
           '<input type="text" name="company" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />' +
           '<input type="text" name="website" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />' +
-          '<button type="submit" style="width:100%;padding:14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Unlock Price</button>' +
+          '<button type="submit" id="vd-submit-btn" style="width:100%;padding:14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Send Verification Code</button>' +
         '</form>' +
+        '<p style="margin:16px 0 0 0;text-align:center;color:#9ca3af;font-size:12px;">We will send a verification code to your phone</p>' +
       '</div>';
 
     // Attach close button handler
     document.getElementById("vd-close-btn").addEventListener("click", closeModal);
 
     // Attach form submit handler
-    document.getElementById("vd-lead-form").addEventListener("submit", function(e) {
+    document.getElementById("vd-step1-form").addEventListener("submit", function(e) {
       e.preventDefault();
-      var formData = new FormData(e.target);
-      var leadData = {
-        publicKey: config.publicKey,
-        name: formData.get("name"),
-        email: formData.get("email"),
-        phone: formData.get("phone"),
-        vehicle: currentVehicleData,
-        url: window.location.href,
-        referrer: document.referrer,
-        company: formData.get("company") || "",
-        website: formData.get("website") || ""
-      };
+      hideError();
       
-      // Submit lead to dedicated endpoint
-      console.log("[VerifiedDemand] Submitting lead:", leadData);
-      try {
-        var xhr = new XMLHttpRequest();
-        xhr.open("POST", config.endpoint + "/api/public/vehicle-lead", true);
-        xhr.setRequestHeader("Content-Type", "application/json");
-        xhr.onreadystatechange = function() {
-          if (xhr.readyState === 4) {
-            if (xhr.status === 200) {
-              console.log("[VerifiedDemand] Lead submitted successfully");
-              log("Lead submitted successfully");
-            } else if (xhr.status === 429) {
-              console.warn("[VerifiedDemand] Rate limited - too many requests");
-            } else {
-              console.error("[VerifiedDemand] Lead submission failed:", xhr.status, xhr.responseText);
-            }
-          }
-        };
-        xhr.send(JSON.stringify(leadData));
-      } catch (err) {
-        console.error("[VerifiedDemand] Lead submission error:", err);
+      var formData = new FormData(e.target);
+      var name = formData.get("name");
+      var phone = formData.get("phone");
+      var email = formData.get("email") || "";
+      
+      // Validate
+      if (!name || name.trim().length < 2) {
+        showError("Please enter your full name");
+        return;
       }
       
-      // Also track the event
-      trackEvent("lead_submit", leadData);
-      log("Lead submitted:", leadData);
-
-      // Show success message
-      modalContainer.innerHTML = 
-        '<div style="padding:40px;text-align:center;">' +
-          '<div style="font-size:48px;margin-bottom:16px;">✓</div>' +
-          '<h2 style="margin:0 0 8px 0;font-size:22px;font-weight:600;color:#111;">Thank You!</h2>' +
-          '<p style="margin:0 0 20px 0;color:#666;font-size:14px;">We will contact you shortly with your verified price.</p>' +
-          '<button id="vd-done-btn" style="padding:12px 32px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Done</button>' +
-        '</div>';
-
-      document.getElementById("vd-done-btn").addEventListener("click", closeModal);
+      // Phone validation - at least 10 digits
+      var phoneDigits = phone.replace(/\\D/g, "");
+      if (phoneDigits.length < 10) {
+        showError("Please enter a valid phone number (at least 10 digits)");
+        return;
+      }
+      
+      // Store lead data for step 2
+      currentLeadData = {
+        publicKey: config.publicKey,
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+        vehicle: currentVehicleData,
+        source_url: window.location.href
+      };
+      
+      // Disable button and show loading
+      var btn = document.getElementById("vd-submit-btn");
+      btn.disabled = true;
+      btn.textContent = "Sending...";
+      
+      // Request OTP
+      requestOTP();
     });
+  }
+
+  // Request OTP from server
+  function requestOTP() {
+    log("Requesting OTP for:", currentLeadData.phone);
+    
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", config.endpoint + "/api/public/otp/request", true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) {
+        var btn = document.getElementById("vd-submit-btn");
+        
+        try {
+          var response = JSON.parse(xhr.responseText);
+          
+          if (xhr.status === 200 && response.ok) {
+            log("OTP sent successfully");
+            trackEvent("otp_requested", { phone: currentLeadData.phone });
+            
+            // Store dev_code if provided (development mode)
+            if (response.dev_code) {
+              currentLeadData.dev_code = response.dev_code;
+            }
+            
+            // Move to step 2
+            showStep2(response.message);
+          } else {
+            // Show error
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = "Send Verification Code";
+            }
+            showError(response.error || "Failed to send verification code. Please try again.");
+            log("OTP request failed:", response.error);
+          }
+        } catch (err) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Send Verification Code";
+          }
+          showError("An error occurred. Please try again.");
+          console.error("[VerifiedDemand] OTP request error:", err);
+        }
+      }
+    };
+    
+    xhr.onerror = function() {
+      var btn = document.getElementById("vd-submit-btn");
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Send Verification Code";
+      }
+      showError("Network error. Please check your connection and try again.");
+    };
+    
+    xhr.send(JSON.stringify(currentLeadData));
+  }
+
+  // Show Step 2: OTP Verification
+  function showStep2(message) {
+    var devCodeHint = "";
+    if (currentLeadData.dev_code) {
+      devCodeHint = '<div style="padding:10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12px;margin-bottom:12px;text-align:center;"><strong>DEV MODE:</strong> Code is ' + currentLeadData.dev_code + '</div>';
+    }
+    
+    modalContainer.innerHTML = 
+      '<div style="padding:24px;">' +
+        '<button id="vd-close-btn" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:24px;cursor:pointer;color:#666;" aria-label="Close">&times;</button>' +
+        '<button id="vd-back-btn" style="position:absolute;top:16px;left:12px;background:none;border:none;font-size:14px;cursor:pointer;color:#666;display:flex;align-items:center;gap:4px;">← Back</button>' +
+        '<h2 style="margin:16px 0 8px 0;font-size:22px;font-weight:600;color:#111;">Verify Your Phone</h2>' +
+        '<p style="margin:0 0 16px 0;color:#666;font-size:14px;">Enter the 6-digit code sent to ' + currentLeadData.phone + '</p>' +
+        devCodeHint +
+        '<div id="vd-error-msg" style="display:none;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;color:#dc2626;font-size:13px;margin-bottom:12px;"></div>' +
+        '<form id="vd-step2-form">' +
+          '<div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px;">' +
+            '<input type="text" id="vd-otp-1" maxlength="1" pattern="[0-9]" inputmode="numeric" style="width:45px;height:55px;text-align:center;font-size:24px;font-weight:600;border:2px solid #ddd;border-radius:8px;" />' +
+            '<input type="text" id="vd-otp-2" maxlength="1" pattern="[0-9]" inputmode="numeric" style="width:45px;height:55px;text-align:center;font-size:24px;font-weight:600;border:2px solid #ddd;border-radius:8px;" />' +
+            '<input type="text" id="vd-otp-3" maxlength="1" pattern="[0-9]" inputmode="numeric" style="width:45px;height:55px;text-align:center;font-size:24px;font-weight:600;border:2px solid #ddd;border-radius:8px;" />' +
+            '<input type="text" id="vd-otp-4" maxlength="1" pattern="[0-9]" inputmode="numeric" style="width:45px;height:55px;text-align:center;font-size:24px;font-weight:600;border:2px solid #ddd;border-radius:8px;" />' +
+            '<input type="text" id="vd-otp-5" maxlength="1" pattern="[0-9]" inputmode="numeric" style="width:45px;height:55px;text-align:center;font-size:24px;font-weight:600;border:2px solid #ddd;border-radius:8px;" />' +
+            '<input type="text" id="vd-otp-6" maxlength="1" pattern="[0-9]" inputmode="numeric" style="width:45px;height:55px;text-align:center;font-size:24px;font-weight:600;border:2px solid #ddd;border-radius:8px;" />' +
+          '</div>' +
+          '<button type="submit" id="vd-verify-btn" style="width:100%;padding:14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Verify & Unlock Price</button>' +
+        '</form>' +
+        '<p style="margin:16px 0 0 0;text-align:center;color:#9ca3af;font-size:12px;">Did not receive the code? <button id="vd-resend-btn" style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:12px;text-decoration:underline;">Resend</button></p>' +
+      '</div>';
+
+    // Close button
+    document.getElementById("vd-close-btn").addEventListener("click", closeModal);
+    
+    // Back button
+    document.getElementById("vd-back-btn").addEventListener("click", function() {
+      showStep1();
+    });
+    
+    // OTP input auto-advance
+    var otpInputs = [];
+    for (var i = 1; i <= 6; i++) {
+      otpInputs.push(document.getElementById("vd-otp-" + i));
+    }
+    
+    otpInputs.forEach(function(input, idx) {
+      input.addEventListener("input", function(e) {
+        // Only allow digits
+        this.value = this.value.replace(/[^0-9]/g, "");
+        
+        if (this.value.length === 1 && idx < 5) {
+          otpInputs[idx + 1].focus();
+        }
+      });
+      
+      input.addEventListener("keydown", function(e) {
+        if (e.key === "Backspace" && !this.value && idx > 0) {
+          otpInputs[idx - 1].focus();
+        }
+      });
+      
+      // Handle paste
+      input.addEventListener("paste", function(e) {
+        e.preventDefault();
+        var pasteData = (e.clipboardData || window.clipboardData).getData("text");
+        var digits = pasteData.replace(/[^0-9]/g, "").slice(0, 6);
+        
+        for (var j = 0; j < digits.length; j++) {
+          if (otpInputs[j]) {
+            otpInputs[j].value = digits[j];
+          }
+        }
+        
+        // Focus last filled input or next empty
+        var lastIdx = Math.min(digits.length, 5);
+        otpInputs[lastIdx].focus();
+      });
+    });
+    
+    // Focus first input
+    otpInputs[0].focus();
+    
+    // Resend button
+    document.getElementById("vd-resend-btn").addEventListener("click", function() {
+      this.disabled = true;
+      this.textContent = "Sending...";
+      requestOTP();
+    });
+    
+    // Verify form
+    document.getElementById("vd-step2-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      hideError();
+      
+      // Collect OTP
+      var otp = "";
+      for (var i = 1; i <= 6; i++) {
+        otp += document.getElementById("vd-otp-" + i).value || "";
+      }
+      
+      if (otp.length !== 6) {
+        showError("Please enter the complete 6-digit code");
+        return;
+      }
+      
+      // Disable button
+      var btn = document.getElementById("vd-verify-btn");
+      btn.disabled = true;
+      btn.textContent = "Verifying...";
+      
+      // Verify OTP
+      verifyOTP(otp);
+    });
+  }
+
+  // Verify OTP with server
+  function verifyOTP(code) {
+    log("Verifying OTP:", code);
+    
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", config.endpoint + "/api/public/otp/verify", true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) {
+        var btn = document.getElementById("vd-verify-btn");
+        
+        try {
+          var response = JSON.parse(xhr.responseText);
+          
+          if (xhr.status === 200 && response.ok && response.verified) {
+            log("OTP verified successfully, lead created:", response.lead_id);
+            trackEvent("otp_verified", { phone: currentLeadData.phone, lead_id: response.lead_id });
+            trackEvent("lead_submit_verified", currentLeadData);
+            
+            // Show success
+            showSuccess();
+          } else {
+            // Show error
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = "Verify & Unlock Price";
+            }
+            showError(response.error || "Invalid verification code. Please try again.");
+            log("OTP verification failed:", response.error);
+          }
+        } catch (err) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Verify & Unlock Price";
+          }
+          showError("An error occurred. Please try again.");
+          console.error("[VerifiedDemand] OTP verify error:", err);
+        }
+      }
+    };
+    
+    xhr.onerror = function() {
+      var btn = document.getElementById("vd-verify-btn");
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Verify & Unlock Price";
+      }
+      showError("Network error. Please check your connection and try again.");
+    };
+    
+    xhr.send(JSON.stringify({
+      publicKey: config.publicKey,
+      phone: currentLeadData.phone,
+      code: code
+    }));
+  }
+
+  // Show Success Screen
+  function showSuccess() {
+    modalContainer.innerHTML = 
+      '<div style="padding:40px;text-align:center;">' +
+        '<div style="width:64px;height:64px;margin:0 auto 16px;background:#dcfce7;border-radius:50%;display:flex;align-items:center;justify-content:center;">' +
+          '<svg style="width:32px;height:32px;color:#16a34a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>' +
+        '</div>' +
+        '<h2 style="margin:0 0 8px 0;font-size:22px;font-weight:600;color:#111;">Phone Verified!</h2>' +
+        '<p style="margin:0 0 8px 0;color:#16a34a;font-size:14px;font-weight:500;">✓ Verified Lead</p>' +
+        '<p style="margin:0 0 24px 0;color:#666;font-size:14px;">A dealer representative will contact you shortly with your verified price.</p>' +
+        '<button id="vd-done-btn" style="padding:12px 32px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Done</button>' +
+      '</div>';
+
+    document.getElementById("vd-done-btn").addEventListener("click", closeModal);
+  }
+
+  // Open modal with vehicle data
+  function openModal(vehicleData) {
+    console.log("[VerifiedDemand] openModal called with:", vehicleData);
+    
+    createModal();
+    currentVehicleData = vehicleData || {};
+    currentLeadData = null;
+
+    // Track modal open event
+    trackEvent("modal_open", currentVehicleData);
+
+    // Show step 1
+    showStep1();
 
     // Show modal
     modalOverlay.style.display = "flex";
