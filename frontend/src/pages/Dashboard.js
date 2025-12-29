@@ -186,39 +186,32 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
                     <td className="px-3 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {lead.created_at ? new Date(lead.created_at).toLocaleString() : "-"}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{lead.name || "-"}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
+                    <td className="px-3 py-3 text-sm text-gray-900">{lead.name || "-"}</td>
+                    <td className="px-3 py-3 text-sm text-gray-900">
                       <span className={!lead.email_valid && lead.email_valid !== undefined ? 'text-red-600' : ''}>
                         {lead.email || "-"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
+                    <td className="px-3 py-3 text-sm text-gray-900">
                       <span className={!lead.phone_valid && lead.phone_valid !== undefined ? 'text-red-600' : ''}>
                         {lead.phone || "-"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
+                    <td className="px-3 py-3 text-sm text-gray-900">
                       <span title={JSON.stringify(lead.vehicle, null, 2)}>
                         {formatVehicle(lead.vehicle)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm">
+                    <td className="px-3 py-3 text-sm text-gray-500 max-w-24 truncate" title={lead.source_domain}>
+                      {lead.source_domain || "-"}
+                    </td>
+                    <td className="px-3 py-3 text-sm">
+                      <DomainStatusBadge status={lead.domain_status} domain={lead.source_domain} />
+                    </td>
+                    <td className="px-3 py-3 text-sm">
                       <LeadFlags lead={lead} />
                     </td>
-                    <td className="px-4 py-3 text-sm">
-                      {lead.source_url ? (
-                        <a
-                          href={lead.source_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 truncate block max-w-xs"
-                          title={lead.source_url}
-                        >
-                          {(() => { try { return new URL(lead.source_url).pathname || "/"; } catch { return lead.source_url; } })()}
-                        </a>
-                      ) : "-"}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
+                    <td className="px-3 py-3 text-sm">
                       <ExpandableJSON data={lead} label="View" />
                     </td>
                   </tr>
