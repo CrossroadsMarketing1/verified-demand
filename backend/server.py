@@ -2171,10 +2171,11 @@ EMBED_JS = '''
     modalContainer.innerHTML = 
       '<div style="padding:24px;">' +
         '<button id="vd-close-btn" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:24px;cursor:pointer;color:#666;" aria-label="Close">&times;</button>' +
-        '<button id="vd-back-btn" style="position:absolute;top:16px;left:12px;background:none;border:none;font-size:14px;cursor:pointer;color:#666;display:flex;align-items:center;gap:4px;">← Back</button>' +
         '<h2 style="margin:16px 0 8px 0;font-size:22px;font-weight:600;color:#111;">Verify Your Phone</h2>' +
-        '<p style="margin:0 0 16px 0;color:#666;font-size:14px;">Enter the 6-digit code sent to ' + currentLeadData.phone + '</p>' +
+        '<p style="margin:0 0 8px 0;color:#666;font-size:14px;">Enter the 6-digit code sent to <strong>' + currentLeadData.phone + '</strong></p>' +
+        '<p style="margin:0 0 16px 0;"><button id="vd-change-phone-btn" style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:12px;text-decoration:underline;padding:0;">Change phone number</button></p>' +
         devCodeHint +
+        '<div id="vd-success-msg" style="display:none;padding:10px;background:#dcfce7;border:1px solid #86efac;border-radius:6px;color:#166534;font-size:13px;margin-bottom:12px;text-align:center;"></div>' +
         '<div id="vd-error-msg" style="display:none;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;color:#dc2626;font-size:13px;margin-bottom:12px;"></div>' +
         '<form id="vd-step2-form">' +
           '<div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px;">' +
@@ -2187,14 +2188,14 @@ EMBED_JS = '''
           '</div>' +
           '<button type="submit" id="vd-verify-btn" style="width:100%;padding:14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Verify & Unlock Price</button>' +
         '</form>' +
-        '<p style="margin:16px 0 0 0;text-align:center;color:#9ca3af;font-size:12px;">Did not receive the code? <button id="vd-resend-btn" style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:12px;text-decoration:underline;">Resend</button></p>' +
+        '<p style="margin:16px 0 0 0;text-align:center;color:#9ca3af;font-size:12px;">Did not receive the code? <button id="vd-resend-btn" disabled style="background:none;border:none;color:#9ca3af;cursor:not-allowed;font-size:12px;">Resend in 30s</button></p>' +
       '</div>';
 
     // Close button
     document.getElementById("vd-close-btn").addEventListener("click", closeModal);
     
-    // Back button
-    document.getElementById("vd-back-btn").addEventListener("click", function() {
+    // Change phone button - go back to step 1
+    document.getElementById("vd-change-phone-btn").addEventListener("click", function() {
       showStep1();
     });
     
