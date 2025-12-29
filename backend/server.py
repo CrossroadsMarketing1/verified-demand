@@ -2417,7 +2417,7 @@ async def rotate_site_key(public_key: str, request: Request, _user: dict = Depen
 
 
 @api_router.post("/dashboard/sites/{public_key}/send-test-email")
-async def send_test_email(public_key: str, request: Request, _user: dict = Depends(require_auth)):
+async def send_test_email(public_key: str, request: Request, _user: dict = Depends(require_admin)):
     """Send a test email to the site's notification emails"""
     
     site = await db.sites.find_one({"public_key": public_key})
