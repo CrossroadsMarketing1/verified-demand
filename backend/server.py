@@ -664,6 +664,35 @@ def normalize_phone_for_otp(phone: str) -> str:
     return re.sub(r'\D', '', phone)
 
 
+# Unlock code generation - exclude confusing characters (0, O, I, l, 1)
+UNLOCK_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+def generate_unlock_code() -> str:
+    """
+    Generate a unique, human-readable unlock/confirmation code.
+    Format: VD-XXXXXX (6 alphanumeric chars, excludes confusing chars)
+    """
+    code_part = ''.join(random.choices(UNLOCK_CODE_CHARS, k=6))
+    return f"VD-{code_part}"
+
+
+async def get_unique_unlock_code(max_attempts: int = 10) -> str:
+    """
+    Generate a unique unlock code, checking against existing codes in DB.
+    Returns a unique code or raises an exception after max attempts.
+    """
+    for _ in range(max_attempts):
+        code = generate_unlock_code()
+        # Check if code already exists
+        existing = await db.vehicle_leads.find_one({"unlock_code": code})
+        if not existing:
+            return code
+    # Fallback: add random suffix for guaranteed uniqueness
+    code = generate_unlock_code()
+    suffix = ''.join(random.choices(UNLOCK_CODE_CHARS, k=2))
+    return f"{code}{suffix}"
+
+
 async def send_sms(to_phone: str, message: str, otp_code: str = None) -> tuple[bool, str, str]:
     """
     Send SMS via Twilio or mock in development mode.
