@@ -1377,11 +1377,12 @@ async def register_user(user_data: UserRegister):
             content={"ok": False, "error": "Email already registered"}
         )
     
-    # Validate password
-    if len(user_data.password) < 8:
+    # Validate password strength
+    is_valid_pwd, pwd_error = validate_password_strength(user_data.password)
+    if not is_valid_pwd:
         return JSONResponse(
             status_code=400,
-            content={"ok": False, "error": "Password must be at least 8 characters"}
+            content={"ok": False, "error": pwd_error}
         )
     
     # Check if this is the first user (admin bootstrap)
