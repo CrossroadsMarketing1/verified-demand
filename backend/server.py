@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Query, BackgroundTasks
+from fastapi import FastAPI, APIRouter, Query, BackgroundTasks, Request
 from fastapi.responses import Response, PlainTextResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
