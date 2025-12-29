@@ -2012,7 +2012,7 @@ async def get_site(public_key: str, request: Request, _user: dict = Depends(requ
 
 
 @api_router.patch("/dashboard/sites/{public_key}")
-async def update_site(public_key: str, update: SiteUpdate):
+async def update_site(public_key: str, update: SiteUpdate, request: Request, _user: dict = Depends(require_auth)):
     """Update a site's settings"""
     
     # Validate domain if provided
@@ -2053,7 +2053,7 @@ async def update_site(public_key: str, update: SiteUpdate):
 
 
 @api_router.post("/dashboard/sites/{public_key}/rotate-key")
-async def rotate_site_key(public_key: str):
+async def rotate_site_key(public_key: str, request: Request, _user: dict = Depends(require_auth)):
     """Rotate a site's public key, preserving the old key in history"""
     
     site = await db.sites.find_one({"public_key": public_key})
