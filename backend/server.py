@@ -2985,8 +2985,10 @@ async def create_indexes():
             ("status", 1)
         ])
         await db.otp_verifications.create_index("created_at")
-        # Note: TTL index would need to be created manually with proper datetime field
-        # For now, we'll clean up expired records during queries
+        
+        # Indexes for users collection
+        await db.users.create_index("email", unique=True)
+        await db.users.create_index("id", unique=True)
         
         logger.info("MongoDB indexes created successfully")
     except Exception as e:
