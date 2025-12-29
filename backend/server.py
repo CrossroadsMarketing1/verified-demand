@@ -617,6 +617,357 @@ async def vehicle_lead_options():
 
 
 # ============================================
+# OTP Verification API Endpoints
+# ============================================
+
+# OTP Models
+class OTPRequest(BaseModel):
+    public_key: str = Field(..., alias="publicKey")
+    phone: str
+    name: str
+    email: Optional[str] = None
+    vehicle: Optional[Any] = None
+    source_url: Optional[str] = None
+    
+    class Config:
+        populate_by_name = True
+
+
+class OTPVerify(BaseModel):
+    public_key: str = Field(..., alias="publicKey")
+    phone: str
+    code: str
+    
+    class Config:
+        populate_by_name = True
+
+
+def generate_otp_code() -> str:
+    """Generate a 6-digit OTP code"""
+    return str(random.randint(100000, 999999))
+
+
+def hash_otp_code(code: str) -> str:
+    """Hash OTP code for secure storage"""
+    return hashlib.sha256(code.encode()).hexdigest()
+
+
+def normalize_phone_for_otp(phone: str) -> str:
+    """Normalize phone number for OTP (digits only)"""
+    return re.sub(r'\D', '', phone)
+
+
+async def send_sms(to_phone: str, message: str) -> bool:
+    """Send SMS via Twilio"""
+    if not is_sms_configured():
+        logger.warning("SMS not configured, cannot send OTP")
+        return False
+    
+    try:
+        from twilio.rest import Client
+        client = Client(SMS_CONFIG["twilio_account_sid"], SMS_CONFIG["twilio_auth_token"])
+        
+        # Format phone number (ensure it starts with +1 for US)
+        formatted_phone = to_phone
+        if not formatted_phone.startswith('+'):
+            if len(formatted_phone) == 10:
+                formatted_phone = '+1' + formatted_phone
+            elif len(formatted_phone) == 11 and formatted_phone.startswith('1'):
+                formatted_phone = '+' + formatted_phone
+            else:
+                formatted_phone = '+' + formatted_phone
+        
+        message = client.messages.create(
+            body=message,
+            from_=SMS_CONFIG["twilio_from_number"],
+            to=formatted_phone
+        )
+        logger.info(f"SMS sent successfully to {to_phone}, SID: {message.sid}")
+        return True
+    except ImportError:
+        logger.error("Twilio library not installed. Run: pip install twilio")
+        return False
+    except Exception as e:
+        logger.error(f"Failed to send SMS: {e}")
+        return False
+
+
+@api_router.post("/public/otp/request")
+async def request_otp(otp_req: OTPRequest, request: Request):
+    """Request OTP code for phone verification"""
+    
+    # Get client info
+    client_ip = get_client_ip(request)
+    source_domain = extract_request_domain(request, otp_req.source_url)
+    
+    # Normalize phone
+    normalized_phone = normalize_phone_for_otp(otp_req.phone)
+    
+    # Validate phone (at least 10 digits)
+    if len(normalized_phone) < 10:
+        return Response(
+            content='{"ok":false,"error":"Invalid phone number. Please enter a valid phone number."}',
+            status_code=400,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    # Check rate limits
+    ip_key = f"otp_ip:{client_ip}"
+    pk_key = f"otp_pk:{otp_req.public_key}"
+    phone_key = f"otp_phone:{normalized_phone}"
+    
+    if not check_rate_limit(ip_key, RATE_LIMIT_PER_IP):
+        logger.warning(f"OTP rate limit exceeded for IP: {client_ip}")
+        return Response(
+            content='{"ok":false,"error":"Too many requests. Please try again later."}',
+            status_code=429,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    if not check_rate_limit(pk_key, RATE_LIMIT_PER_KEY):
+        logger.warning(f"OTP rate limit exceeded for public key: {otp_req.public_key}")
+        return Response(
+            content='{"ok":false,"error":"Too many requests. Please try again later."}',
+            status_code=429,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    if not check_rate_limit(phone_key, RATE_LIMIT_PER_PHONE):
+        logger.warning(f"OTP rate limit exceeded for phone: {normalized_phone}")
+        return Response(
+            content='{"ok":false,"error":"Too many verification attempts for this phone. Please try again later."}',
+            status_code=429,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    # Resolve site
+    site = await resolve_site_by_public_key(otp_req.public_key)
+    if not site:
+        return Response(
+            content='{"ok":false,"error":"Invalid configuration. Please contact support."}',
+            status_code=400,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    # Check domain status - block if mismatch
+    allowlist = get_site_allowlist(site)
+    domain_status = check_domain_status(source_domain, allowlist)
+    
+    if domain_status == 'mismatch':
+        logger.warning(f"OTP blocked due to domain mismatch: {source_domain} for key {otp_req.public_key}")
+        return Response(
+            content='{"ok":false,"error":"This form is not authorized for this website."}',
+            status_code=403,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    # Check if SMS is configured
+    if not is_sms_configured():
+        return Response(
+            content='{"ok":false,"error":"SMS verification is not configured. Please contact support."}',
+            status_code=503,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    # Generate OTP
+    otp_code = generate_otp_code()
+    code_hash = hash_otp_code(otp_code)
+    
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=OTP_EXPIRY_SECONDS)
+    
+    # Store OTP verification record
+    otp_doc = {
+        "id": str(uuid.uuid4()),
+        "public_key": otp_req.public_key,
+        "site_id": site.get("site_id"),
+        "phone": normalized_phone,
+        "code_hash": code_hash,
+        "created_at": now.isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "attempts": 0,
+        "max_attempts": OTP_MAX_ATTEMPTS,
+        "status": "pending",
+        "source_ip": client_ip,
+        "source_domain": source_domain,
+        "domain_status": domain_status,
+        "lead_draft": {
+            "name": otp_req.name,
+            "email": otp_req.email,
+            "phone": otp_req.phone,
+            "vehicle": otp_req.vehicle,
+            "source_url": otp_req.source_url
+        }
+    }
+    
+    await db.otp_verifications.insert_one(otp_doc)
+    
+    # Send SMS
+    sms_message = f"Your verification code is {otp_code}. It expires in 10 minutes."
+    sms_sent = await send_sms(normalized_phone, sms_message)
+    
+    if not sms_sent:
+        # Update status to failed
+        await db.otp_verifications.update_one(
+            {"id": otp_doc["id"]},
+            {"$set": {"status": "failed", "error": "SMS send failed"}}
+        )
+        return Response(
+            content='{"ok":false,"error":"Failed to send verification code. Please try again."}',
+            status_code=500,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    logger.info(f"OTP requested for phone {normalized_phone}, key {otp_req.public_key}")
+    
+    return Response(
+        content=f'{{"ok":true,"expires_in":{OTP_EXPIRY_SECONDS},"message":"Verification code sent to your phone."}}',
+        media_type="application/json",
+        headers=CORS_HEADERS
+    )
+
+
+@api_router.options("/public/otp/request")
+async def otp_request_options():
+    """Handle CORS preflight for /api/public/otp/request"""
+    return Response(status_code=200, headers=CORS_HEADERS)
+
+
+@api_router.post("/public/otp/verify")
+async def verify_otp(otp_verify: OTPVerify, request: Request, background_tasks: BackgroundTasks):
+    """Verify OTP code and create lead"""
+    
+    # Get client info
+    client_ip = get_client_ip(request)
+    
+    # Normalize phone
+    normalized_phone = normalize_phone_for_otp(otp_verify.phone)
+    
+    # Find latest pending OTP for this phone+key
+    now = datetime.now(timezone.utc)
+    otp_record = await db.otp_verifications.find_one({
+        "public_key": otp_verify.public_key,
+        "phone": normalized_phone,
+        "status": "pending",
+        "expires_at": {"$gt": now.isoformat()}
+    }, sort=[("created_at", -1)])
+    
+    if not otp_record:
+        return Response(
+            content='{"ok":false,"error":"No pending verification found. Please request a new code."}',
+            status_code=400,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    # Check if locked
+    if otp_record.get("attempts", 0) >= otp_record.get("max_attempts", OTP_MAX_ATTEMPTS):
+        await db.otp_verifications.update_one(
+            {"id": otp_record["id"]},
+            {"$set": {"status": "locked"}}
+        )
+        return Response(
+            content='{"ok":false,"error":"Too many incorrect attempts. Please request a new code."}',
+            status_code=400,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    # Increment attempts
+    await db.otp_verifications.update_one(
+        {"id": otp_record["id"]},
+        {"$inc": {"attempts": 1}}
+    )
+    
+    # Verify code
+    input_hash = hash_otp_code(otp_verify.code.strip())
+    if input_hash != otp_record["code_hash"]:
+        attempts_left = otp_record.get("max_attempts", OTP_MAX_ATTEMPTS) - otp_record.get("attempts", 0) - 1
+        if attempts_left <= 0:
+            await db.otp_verifications.update_one(
+                {"id": otp_record["id"]},
+                {"$set": {"status": "locked"}}
+            )
+            return Response(
+                content='{"ok":false,"error":"Too many incorrect attempts. Please request a new code."}',
+                status_code=400,
+                media_type="application/json",
+                headers=CORS_HEADERS
+            )
+        return Response(
+            content=f'{{"ok":false,"error":"Invalid code. {attempts_left} attempts remaining."}}',
+            status_code=400,
+            media_type="application/json",
+            headers=CORS_HEADERS
+        )
+    
+    # Code is correct - mark as verified
+    await db.otp_verifications.update_one(
+        {"id": otp_record["id"]},
+        {"$set": {"status": "verified", "verified_at": now.isoformat()}}
+    )
+    
+    # Create the lead from draft
+    lead_draft = otp_record.get("lead_draft", {})
+    
+    # Validate email if provided
+    email = lead_draft.get("email", "")
+    normalized_email, email_valid = validate_email(email) if email else ("", True)
+    
+    lead_doc = {
+        "id": str(uuid.uuid4()),
+        "publicKey": otp_verify.public_key,
+        "name": lead_draft.get("name"),
+        "email": normalized_email,
+        "phone": lead_draft.get("phone"),
+        "vehicle": lead_draft.get("vehicle"),
+        "url": lead_draft.get("source_url"),
+        "server_timestamp": now.isoformat(),
+        "status": "new",
+        "is_verified": True,
+        "verified_at": now.isoformat(),
+        "verification_method": "sms_otp",
+        "otp_verification_id": otp_record["id"],
+        "is_suspected_spam": False,
+        "is_invalid_contact": not email_valid if email else False,
+        "email_valid": email_valid if email else None,
+        "phone_valid": True,  # Verified via SMS
+        "source_ip": otp_record.get("source_ip"),
+        "source_user_agent": request.headers.get("user-agent", "unknown"),
+        "source_domain": otp_record.get("source_domain"),
+        "domain_status": otp_record.get("domain_status", "unknown")
+    }
+    
+    await db.vehicle_leads.insert_one(lead_doc)
+    logger.info(f"Verified lead created: {normalized_email or lead_doc['phone']} for key: {otp_verify.public_key}")
+    
+    # Send dealer notification (only if domain is verified or unknown, not mismatch)
+    domain_status = otp_record.get("domain_status", "unknown")
+    if domain_status != 'mismatch':
+        background_tasks.add_task(send_lead_notification, lead_doc)
+    
+    return Response(
+        content=f'{{"ok":true,"verified":true,"lead_id":"{lead_doc["id"]}","message":"Phone verified successfully!"}}',
+        media_type="application/json",
+        headers=CORS_HEADERS
+    )
+
+
+@api_router.options("/public/otp/verify")
+async def otp_verify_options():
+    """Handle CORS preflight for /api/public/otp/verify"""
+    return Response(status_code=200, headers=CORS_HEADERS)
+
+
+# ============================================
 # Dashboard API Endpoints (Read-Only)
 # ============================================
 
