@@ -109,6 +109,9 @@ class VehicleLead(BaseModel):
     vehicle: Optional[Any] = None
     url: Optional[str] = None
     referrer: Optional[str] = None
+    # Honeypot field - should be empty for real users
+    company: Optional[str] = None
+    website: Optional[str] = None
 
 
 # CORS headers for public endpoints
@@ -118,6 +121,97 @@ CORS_HEADERS = {
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
 }
+
+
+# ============================================
+# Rate Limiting (In-Memory)
+# ============================================
+from collections import defaultdict
+import time
+import re
+
+# Rate limit storage: {key: [(timestamp1, timestamp2, ...)]}
+rate_limit_store = defaultdict(list)
+RATE_LIMIT_WINDOW = 600  # 10 minutes in seconds
+RATE_LIMIT_PER_IP = 10
+RATE_LIMIT_PER_KEY = 30
+
+
+def clean_old_entries(entries: list, window: int) -> list:
+    """Remove entries older than the window"""
+    cutoff = time.time() - window
+    return [t for t in entries if t > cutoff]
+
+
+def check_rate_limit(identifier: str, limit: int) -> bool:
+    """Check if identifier has exceeded rate limit. Returns True if OK, False if exceeded."""
+    global rate_limit_store
+    
+    current_time = time.time()
+    entries = rate_limit_store[identifier]
+    
+    # Clean old entries
+    entries = clean_old_entries(entries, RATE_LIMIT_WINDOW)
+    rate_limit_store[identifier] = entries
+    
+    if len(entries) >= limit:
+        return False  # Rate limit exceeded
+    
+    # Add new entry
+    entries.append(current_time)
+    return True
+
+
+def get_client_ip(request) -> str:
+    """Get client IP, respecting X-Forwarded-For header"""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # Take the first IP in the chain
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+# ============================================
+# Input Validation
+# ============================================
+
+def validate_email(email: str) -> tuple[str, bool]:
+    """Validate and normalize email. Returns (normalized_email, is_valid)"""
+    if not email:
+        return "", False
+    
+    # Normalize
+    email = email.strip().lower()
+    
+    # Basic email regex
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    is_valid = bool(re.match(pattern, email))
+    
+    return email, is_valid
+
+
+def validate_phone(phone: str) -> tuple[str, bool]:
+    """Validate and normalize phone. Returns (normalized_phone, is_valid)"""
+    if not phone:
+        return "", False
+    
+    # Strip non-digits
+    digits_only = re.sub(r'\D', '', phone)
+    
+    # Valid if at least 10 digits
+    is_valid = len(digits_only) >= 10
+    
+    return phone.strip(), is_valid
+
+
+def check_honeypot(lead: VehicleLead) -> bool:
+    """Check if honeypot fields are filled (indicates bot). Returns True if spam suspected."""
+    # If either honeypot field has content, it's likely a bot
+    if lead.company and lead.company.strip():
+        return True
+    if lead.website and lead.website.strip():
+        return True
+    return False
 
 
 # ============================================
