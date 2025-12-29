@@ -1561,10 +1561,12 @@ async def debug_sample(
 
 @api_router.get("/dashboard/summary")
 async def get_dashboard_summary(
+    request: Request,
     public_key: Optional[str] = Query(None, alias="public_key", description="Public key to filter by"),
     publicKey: Optional[str] = Query(None, description="Public key (alternative param name)"),
     start: Optional[str] = Query(None, description="Start date (ISO format)"),
-    end: Optional[str] = Query(None, description="End date (ISO format)")
+    end: Optional[str] = Query(None, description="End date (ISO format)"),
+    _user: dict = Depends(require_auth)
 ):
     """Get summary statistics for a public key"""
     
