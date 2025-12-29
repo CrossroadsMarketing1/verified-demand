@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 const EMBED_URL = `${BACKEND_URL}/api/embed.js`;
+
+// Configure axios to send cookies
+axios.defaults.withCredentials = true;
 
 // Modal Component
 const Modal = ({ isOpen, onClose, title, children }) => {
