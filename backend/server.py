@@ -2171,9 +2171,46 @@ def serialize_site(doc: dict) -> dict:
     return result
 
 
+async def get_user_accessible_site_keys(user: dict) -> Optional[List[str]]:
+    """
+    Get list of public keys the user can access.
+    Returns None if user is admin (can access all), otherwise returns list of allowed keys.
+    """
+    if user.get("role") == "admin":
+        return None  # Admin can access all sites
+    
+    user_id = user.get("id")
+    # Find sites where user is owner OR in allowed_user_ids
+    query = {
+        "$or": [
+            {"owner_user_id": user_id},
+            {"allowed_user_ids": user_id}
+        ]
+    }
+    cursor = db.sites.find(query, {"public_key": 1})
+    sites = await cursor.to_list(length=1000)
+    return [s["public_key"] for s in sites]
+
+
+async def user_can_access_site(user: dict, public_key: str) -> bool:
+    """Check if user can access a specific site by public key"""
+    if user.get("role") == "admin":
+        return True
+    
+    user_id = user.get("id")
+    site = await db.sites.find_one({
+        "public_key": public_key,
+        "$or": [
+            {"owner_user_id": user_id},
+            {"allowed_user_ids": user_id}
+        ]
+    })
+    return site is not None
+
+
 @api_router.post("/dashboard/sites")
-async def create_site(site: SiteCreate, request: Request, _user: dict = Depends(require_auth)):
-    """Create a new site with auto-generated public key"""
+async def create_site(site: SiteCreate, request: Request, _user: dict = Depends(require_admin)):
+    """Create a new site with auto-generated public key (Admin only)"""
     
     # Validate domain if provided
     if site.domain and not validate_domain(site.domain):
