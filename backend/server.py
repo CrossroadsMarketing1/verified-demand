@@ -1,5 +1,5 @@
-from fastapi import FastAPI, APIRouter, Query, BackgroundTasks, Request
-from fastapi.responses import Response, PlainTextResponse
+from fastapi import FastAPI, APIRouter, Query, BackgroundTasks, Request, Depends, HTTPException
+from fastapi.responses import Response, PlainTextResponse, JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -18,6 +18,8 @@ import hashlib
 import random
 import json
 import string
+import jwt
+import bcrypt
 
 
 ROOT_DIR = Path(__file__).parent
