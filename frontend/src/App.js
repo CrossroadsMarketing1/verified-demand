@@ -470,6 +470,14 @@ function App() {
                 </AdminRoute>
               } 
             />
+            <Route 
+              path="/dashboard/v2" 
+              element={
+                <ProtectedRoute>
+                  <DealerDashboard />
+                </ProtectedRoute>
+              } 
+            />
           </Routes>
         </AuthProvider>
       </BrowserRouter>
