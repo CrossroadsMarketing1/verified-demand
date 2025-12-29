@@ -2412,6 +2412,9 @@ class SiteCreate(BaseModel):
     domain: Optional[str] = Field(None, max_length=253)
     notification_emails: Optional[List[str]] = Field(default_factory=list)
     allowed_domains: Optional[List[str]] = Field(default_factory=list)
+    verified_lead_webhook_url: Optional[str] = Field(None, max_length=500)
+    webhook_secret: Optional[str] = Field(None, max_length=100)
+    webhook_enabled: Optional[bool] = Field(default=True)
 
 
 class SiteUpdate(BaseModel):
@@ -2420,6 +2423,9 @@ class SiteUpdate(BaseModel):
     is_active: Optional[bool] = None
     notification_emails: Optional[List[str]] = None
     allowed_domains: Optional[List[str]] = None
+    verified_lead_webhook_url: Optional[str] = Field(None, max_length=500)
+    webhook_secret: Optional[str] = Field(None, max_length=100)
+    webhook_enabled: Optional[bool] = None
 
 
 def generate_public_key() -> str:
