@@ -1572,6 +1572,184 @@ async def get_current_user_info(request: Request):
     )
 
 
+# ============================================
+# Admin User Management Endpoints
+# ============================================
+
+@api_router.get("/dashboard/users")
+async def list_users(request: Request, _user: dict = Depends(require_admin)):
+    """List all users (admin only)"""
+    
+    cursor = db.users.find({}).sort([("created_at", -1)])
+    users = await cursor.to_list(length=1000)
+    
+    # Sanitize output - don't expose password hashes
+    sanitized_users = []
+    for u in users:
+        sanitized_users.append({
+            "id": u.get("id"),
+            "email": u.get("email"),
+            "role": u.get("role", "user"),
+            "is_active": u.get("is_active", True),
+            "created_at": u.get("created_at"),
+            "last_login_at": u.get("last_login_at")
+        })
+    
+    return {"users": sanitized_users, "total": len(sanitized_users)}
+
+
+@api_router.post("/dashboard/users")
+async def admin_create_user(user_data: AdminUserCreate, request: Request, _user: dict = Depends(require_admin)):
+    """Create a new user (admin only) - generates a temporary password"""
+    
+    # Validate email
+    normalized_email, is_valid = validate_email(user_data.email)
+    if not is_valid:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Invalid email address"}
+        )
+    
+    # Check if email already exists
+    existing = await db.users.find_one({"email": normalized_email})
+    if existing:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Email already registered"}
+        )
+    
+    # Validate role
+    role = user_data.role if user_data.role in ["admin", "user"] else "user"
+    
+    # Generate temporary password
+    temp_password = generate_temp_password()
+    
+    # Create user
+    now = datetime.now(timezone.utc)
+    user_doc = {
+        "id": str(uuid.uuid4()),
+        "email": normalized_email,
+        "password_hash": hash_password(temp_password),
+        "role": role,
+        "created_at": now.isoformat(),
+        "last_login_at": None,
+        "is_active": True,
+        "requires_password_change": True  # Flag to prompt password change on first login
+    }
+    
+    await db.users.insert_one(user_doc)
+    logger.info(f"Admin {_user['email']} created user: {normalized_email} (role: {role})")
+    
+    response_data = {
+        "ok": True,
+        "user": {
+            "id": user_doc["id"],
+            "email": user_doc["email"],
+            "role": user_doc["role"],
+            "is_active": user_doc["is_active"]
+        },
+        "message": f"User created successfully"
+    }
+    
+    # Include temp password in response (admin should share this securely)
+    if user_data.send_temp_password:
+        response_data["temp_password"] = temp_password
+        response_data["message"] = f"User created. Temporary password: {temp_password}"
+    
+    return JSONResponse(status_code=201, content=response_data)
+
+
+@api_router.patch("/dashboard/users/{user_id}")
+async def admin_update_user(user_id: str, update: AdminUserUpdate, request: Request, _user: dict = Depends(require_admin)):
+    """Update a user's status or role (admin only)"""
+    
+    # Find user
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "error": "User not found"}
+        )
+    
+    # Prevent admin from disabling themselves
+    if user_id == _user["id"] and update.is_active is False:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Cannot disable your own account"}
+        )
+    
+    # Prevent admin from demoting themselves
+    if user_id == _user["id"] and update.role == "user":
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Cannot demote your own account"}
+        )
+    
+    # Build update document
+    update_doc = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if update.is_active is not None:
+        update_doc["is_active"] = update.is_active
+    
+    if update.role is not None and update.role in ["admin", "user"]:
+        update_doc["role"] = update.role
+    
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": update_doc}
+    )
+    
+    # Fetch updated user
+    updated_user = await db.users.find_one({"id": user_id})
+    
+    logger.info(f"Admin {_user['email']} updated user {user_id}: {update_doc}")
+    
+    return {
+        "ok": True,
+        "user": {
+            "id": updated_user["id"],
+            "email": updated_user["email"],
+            "role": updated_user.get("role", "user"),
+            "is_active": updated_user.get("is_active", True)
+        },
+        "message": "User updated successfully"
+    }
+
+
+@api_router.post("/dashboard/users/{user_id}/reset-password")
+async def admin_reset_password(user_id: str, request: Request, _user: dict = Depends(require_admin)):
+    """Reset a user's password to a temporary password (admin only)"""
+    
+    # Find user
+    user = await db.users.find_one({"id": user_id})
+    if not user:
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "error": "User not found"}
+        )
+    
+    # Generate new temporary password
+    temp_password = generate_temp_password()
+    
+    # Update user
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {
+            "password_hash": hash_password(temp_password),
+            "requires_password_change": True,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    logger.info(f"Admin {_user['email']} reset password for user {user_id}")
+    
+    return {
+        "ok": True,
+        "temp_password": temp_password,
+        "message": f"Password reset. New temporary password: {temp_password}"
+    }
+
+
 # Debug endpoint - for development only
 @api_router.get("/dashboard/debug-sample")
 async def debug_sample(
