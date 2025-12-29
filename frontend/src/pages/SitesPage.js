@@ -529,7 +529,9 @@ const SitesPage = () => {
         <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Sites & Install</h1>
-            <p className="text-sm text-gray-500 mt-1">Manage your sites and get install snippets</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {isAdmin ? "Manage your sites and get install snippets" : "View your assigned sites"}
+            </p>
           </div>
           <div className="flex gap-3">
             <Link
@@ -538,12 +540,16 @@ const SitesPage = () => {
             >
               Analytics
             </Link>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              + Create Site
-            </button>
+            {/* Only show Create Site button for admins */}
+            {isAdmin && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                data-testid="create-site-btn"
+              >
+                + Create Site
+              </button>
+            )}
             <button
               onClick={async () => {
                 try {
