@@ -2345,8 +2345,8 @@ async def update_site(public_key: str, update: SiteUpdate, request: Request, _us
 
 
 @api_router.post("/dashboard/sites/{public_key}/rotate-key")
-async def rotate_site_key(public_key: str, request: Request, _user: dict = Depends(require_auth)):
-    """Rotate a site's public key, preserving the old key in history"""
+async def rotate_site_key(public_key: str, request: Request, _user: dict = Depends(require_admin)):
+    """Rotate a site's public key, preserving the old key in history (Admin only)"""
     
     site = await db.sites.find_one({"public_key": public_key})
     if not site:
