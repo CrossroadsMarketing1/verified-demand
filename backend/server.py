@@ -2402,18 +2402,73 @@ EMBED_JS = '''
     }));
   }
 
-  // Show Success Screen
+  // Show Success Screen with unlock code
   function showSuccess() {
+    var unlockCode = currentLeadData.unlock_code || "";
+    var unlockCodeSection = "";
+    
+    if (unlockCode) {
+      unlockCodeSection = 
+        '<div style="background:#f0f9ff;border:2px solid #0ea5e9;border-radius:8px;padding:16px;margin:16px 0;">' +
+          '<div style="font-size:11px;color:#0369a1;text-transform:uppercase;font-weight:bold;margin-bottom:6px;letter-spacing:1px;">Your Confirmation Code</div>' +
+          '<div id="vd-unlock-code" style="font-size:28px;font-weight:bold;color:#0c4a6e;letter-spacing:3px;margin-bottom:10px;">' + unlockCode + '</div>' +
+          '<button id="vd-copy-code-btn" style="padding:8px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">📋 Copy Code</button>' +
+          '<span id="vd-copy-success" style="display:none;margin-left:8px;color:#16a34a;font-size:12px;">Copied!</span>' +
+        '</div>';
+    }
+    
     modalContainer.innerHTML = 
       '<div style="padding:40px;text-align:center;">' +
         '<div style="width:64px;height:64px;margin:0 auto 16px;background:#dcfce7;border-radius:50%;display:flex;align-items:center;justify-content:center;">' +
           '<svg style="width:32px;height:32px;color:#16a34a;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>' +
         '</div>' +
-        '<h2 style="margin:0 0 8px 0;font-size:22px;font-weight:600;color:#111;">Phone Verified!</h2>' +
-        '<p style="margin:0 0 8px 0;color:#16a34a;font-size:14px;font-weight:500;">✓ Verified Lead</p>' +
-        '<p style="margin:0 0 24px 0;color:#666;font-size:14px;">A dealer representative will contact you shortly with your verified price.</p>' +
+        '<h2 style="margin:0 0 8px 0;font-size:24px;font-weight:600;color:#111;">Unlocked!</h2>' +
+        '<p style="margin:0 0 8px 0;color:#16a34a;font-size:14px;font-weight:500;">✓ Phone Verified</p>' +
+        unlockCodeSection +
+        '<p style="margin:16px 0 24px 0;color:#666;font-size:14px;">A team member will contact you shortly.</p>' +
         '<button id="vd-done-btn" style="padding:12px 32px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Done</button>' +
       '</div>';
+
+    // Copy code button handler
+    var copyBtn = document.getElementById("vd-copy-code-btn");
+    if (copyBtn && unlockCode) {
+      copyBtn.addEventListener("click", function() {
+        // Try clipboard API first
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(unlockCode).then(function() {
+            showCopySuccess();
+          }).catch(function() {
+            fallbackCopy(unlockCode);
+          });
+        } else {
+          fallbackCopy(unlockCode);
+        }
+      });
+    }
+    
+    function fallbackCopy(text) {
+      var textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand("copy");
+        showCopySuccess();
+      } catch (e) {
+        console.error("Copy failed:", e);
+      }
+      document.body.removeChild(textarea);
+    }
+    
+    function showCopySuccess() {
+      var successSpan = document.getElementById("vd-copy-success");
+      if (successSpan) {
+        successSpan.style.display = "inline";
+        setTimeout(function() { successSpan.style.display = "none"; }, 2000);
+      }
+    }
 
     document.getElementById("vd-done-btn").addEventListener("click", closeModal);
   }
