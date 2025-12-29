@@ -212,6 +212,91 @@ def get_client_ip(request) -> str:
 
 
 # ============================================
+# Authentication Helpers
+# ============================================
+
+def hash_password(password: str) -> str:
+    """Hash password using bcrypt"""
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify password against hash"""
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+    except Exception:
+        return False
+
+
+def create_jwt_token(user_id: str, email: str, role: str) -> str:
+    """Create JWT token for user"""
+    payload = {
+        "user_id": user_id,
+        "email": email,
+        "role": role,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRY_HOURS),
+        "iat": datetime.now(timezone.utc)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+
+def decode_jwt_token(token: str) -> Optional[dict]:
+    """Decode and verify JWT token"""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        return payload
+    except jwt.ExpiredSignatureError:
+        logger.warning("JWT token expired")
+        return None
+    except jwt.InvalidTokenError as e:
+        logger.warning(f"Invalid JWT token: {e}")
+        return None
+
+
+async def get_current_user(request: Request) -> Optional[dict]:
+    """Extract current user from JWT cookie"""
+    token = request.cookies.get(AUTH_COOKIE_NAME)
+    if not token:
+        return None
+    
+    payload = decode_jwt_token(token)
+    if not payload:
+        return None
+    
+    # Verify user still exists and is active
+    user = await db.users.find_one({
+        "id": payload.get("user_id"),
+        "is_active": True
+    })
+    
+    if not user:
+        return None
+    
+    return {
+        "id": user["id"],
+        "email": user["email"],
+        "role": user.get("role", "user")
+    }
+
+
+async def require_auth(request: Request) -> dict:
+    """Dependency to require authentication"""
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user
+
+
+async def require_admin(request: Request) -> dict:
+    """Dependency to require admin role"""
+    user = await require_auth(request)
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+# ============================================
 # Input Validation
 # ============================================
 
