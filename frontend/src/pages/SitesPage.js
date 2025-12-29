@@ -161,7 +161,7 @@ const CreateSiteForm = ({ onSuccess, onCancel }) => {
 };
 
 // Site Detail/Edit Component
-const SiteDetail = ({ site, onClose, onUpdate }) => {
+const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
   const [name, setName] = useState(site.name);
   const [domain, setDomain] = useState(site.domain || "");
   const [emails, setEmails] = useState((site.notification_emails || []).join(", "));
@@ -185,10 +185,14 @@ const SiteDetail = ({ site, onClose, onUpdate }) => {
         setTestEmailStatus({ type: "error", message: response.data.error });
       }
     } catch (err) {
-      setTestEmailStatus({ 
-        type: "error", 
-        message: err.response?.data?.error || "Failed to send test email" 
-      });
+      if (err.response?.status === 403) {
+        setTestEmailStatus({ type: "error", message: "Admin access required" });
+      } else {
+        setTestEmailStatus({ 
+          type: "error", 
+          message: err.response?.data?.error || "Failed to send test email" 
+        });
+      }
     } finally {
       setSendingTestEmail(false);
     }
@@ -223,7 +227,11 @@ const SiteDetail = ({ site, onClose, onUpdate }) => {
         onUpdate(response.data);
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to update site");
+      if (err.response?.status === 403) {
+        setError("Admin access required to update site settings");
+      } else {
+        setError(err.response?.data?.error || "Failed to update site");
+      }
     } finally {
       setLoading(false);
     }
@@ -245,6 +253,13 @@ const SiteDetail = ({ site, onClose, onUpdate }) => {
   
   return (
     <div className="space-y-6">
+      {/* Non-admin notice */}
+      {!isAdmin && (
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-blue-800 text-sm">
+          ℹ️ You have view-only access to this site. Contact an administrator to make changes.
+        </div>
+      )}
+      
       {/* Public Key Section */}
       <div className="bg-gray-50 p-4 rounded-lg">
         <label className="block text-sm font-medium text-gray-700 mb-2">
