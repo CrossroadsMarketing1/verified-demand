@@ -459,6 +459,154 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
         )}
       </div>
       
+      {/* Webhook Configuration - Admin Only */}
+      {isAdmin && (
+        <div className="border-t border-gray-200 pt-4 mt-4">
+          <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            🔗 Webhook Configuration
+            <span className="text-xs font-normal text-gray-500">(for CRM / Zapier / Make)</span>
+          </h4>
+          
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Webhook URL
+              </label>
+              <input
+                type="url"
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                placeholder="https://hooks.zapier.com/hooks/catch/..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                data-testid="webhook-url-input"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Verified leads will be POSTed to this URL as JSON.
+              </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Webhook Secret (optional)
+              </label>
+              <input
+                type="text"
+                value={webhookSecret}
+                onChange={(e) => setWebhookSecret(e.target.value)}
+                placeholder="Leave blank to auto-generate"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Used to sign payloads (X-VD-Signature header).
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700">Webhook Enabled:</label>
+              <button
+                onClick={() => setWebhookEnabled(!webhookEnabled)}
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  webhookEnabled
+                    ? "bg-green-100 text-green-800"
+                    : "bg-gray-100 text-gray-800"
+                }`}
+              >
+                {webhookEnabled ? "Enabled" : "Disabled"}
+              </button>
+            </div>
+            
+            {webhookUrl && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSendTestWebhook}
+                  disabled={sendingTestWebhook}
+                  className="px-3 py-1 text-sm bg-blue-100 text-blue-700 border border-blue-300 rounded-md hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  data-testid="test-webhook-btn"
+                >
+                  {sendingTestWebhook ? "Sending..." : "🧪 Send Test Webhook"}
+                </button>
+                <button
+                  onClick={() => { setShowWebhookLogs(!showWebhookLogs); if (!showWebhookLogs) fetchWebhookLogs(); }}
+                  className="px-3 py-1 text-sm bg-gray-100 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-200"
+                >
+                  {showWebhookLogs ? "Hide Logs" : "📋 View Logs"}
+                </button>
+              </div>
+            )}
+            
+            {testWebhookStatus && (
+              <div className={`p-2 rounded-md text-sm ${
+                testWebhookStatus.type === "success" 
+                  ? "bg-green-50 border border-green-200 text-green-700"
+                  : "bg-red-50 border border-red-200 text-red-700"
+              }`}>
+                {testWebhookStatus.type === "success" ? "✅ " : "❌ "}
+                {testWebhookStatus.message}
+                {testWebhookStatus.details && (
+                  <pre className="mt-1 text-xs opacity-75 overflow-auto max-h-20">{testWebhookStatus.details}</pre>
+                )}
+              </div>
+            )}
+            
+            {/* Webhook Logs */}
+            {showWebhookLogs && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-3 py-2 border-b border-gray-200 flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Recent Deliveries</span>
+                  <button
+                    onClick={fetchWebhookLogs}
+                    disabled={loadingLogs}
+                    className="text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    {loadingLogs ? "Loading..." : "Refresh"}
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  {webhookLogs.length === 0 ? (
+                    <div className="p-3 text-sm text-gray-500 text-center">
+                      No webhook deliveries yet.
+                    </div>
+                  ) : (
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-2 py-1 text-left">Time</th>
+                          <th className="px-2 py-1 text-left">Event</th>
+                          <th className="px-2 py-1 text-left">Status</th>
+                          <th className="px-2 py-1 text-left">HTTP</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {webhookLogs.map((log, i) => (
+                          <tr key={log.id || i} className="hover:bg-gray-50">
+                            <td className="px-2 py-1.5 text-gray-600">
+                              {new Date(log.created_at).toLocaleString()}
+                            </td>
+                            <td className="px-2 py-1.5 font-mono">{log.event}</td>
+                            <td className="px-2 py-1.5">
+                              <span className={`px-1.5 py-0.5 rounded text-xs ${
+                                log.status === "success"
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-red-100 text-red-700"
+                              }`}>
+                                {log.status}
+                              </span>
+                            </td>
+                            <td className="px-2 py-1.5 text-gray-600">
+                              {log.http_status || "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
       <div className="flex items-center gap-3">
         <label className="text-sm font-medium text-gray-700">Status:</label>
         {isAdmin ? (
