@@ -2030,6 +2030,12 @@ async def get_event_types(
     if not key:
         return {"event_types": []}
     
+    # Check access for non-admin users
+    if _user.get("role") != "admin":
+        can_access = await user_can_access_site(_user, key)
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Access denied to this site's data")
+    
     key_filter = build_public_key_filter(key)
     
     # Get distinct values from both possible field names
