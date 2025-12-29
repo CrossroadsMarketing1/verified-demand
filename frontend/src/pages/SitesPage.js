@@ -161,6 +161,7 @@ const SiteDetail = ({ site, onClose, onUpdate }) => {
   const [name, setName] = useState(site.name);
   const [domain, setDomain] = useState(site.domain || "");
   const [emails, setEmails] = useState((site.notification_emails || []).join(", "));
+  const [allowedDomains, setAllowedDomains] = useState((site.allowed_domains || []).join("\n"));
   const [isActive, setIsActive] = useState(site.is_active);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -199,11 +200,17 @@ const SiteDetail = ({ site, onClose, onUpdate }) => {
         .map(e => e.trim())
         .filter(e => e.length > 0);
       
+      const domainList = allowedDomains
+        .split("\n")
+        .map(d => d.trim())
+        .filter(d => d.length > 0);
+      
       const response = await axios.patch(`${API}/dashboard/sites/${site.public_key}`, {
         name,
         domain: domain || null,
         is_active: isActive,
-        notification_emails: emailList
+        notification_emails: emailList,
+        allowed_domains: domainList
       });
       
       if (response.data.error) {
