@@ -3088,7 +3088,7 @@ async def trigger_verified_lead_webhook(lead_doc: dict, public_key: str):
         
         # Check conditions
         if not lead_doc.get("is_verified"):
-            logger.info(f"Skipping webhook - lead not verified")
+            logger.info("Skipping webhook - lead not verified")
             return
         
         if lead_doc.get("domain_status") != "verified":
@@ -3096,11 +3096,11 @@ async def trigger_verified_lead_webhook(lead_doc: dict, public_key: str):
             return
         
         if lead_doc.get("is_suspected_spam"):
-            logger.info(f"Skipping webhook - lead is suspected spam")
+            logger.info("Skipping webhook - lead is suspected spam")
             return
         
         if lead_doc.get("is_invalid_contact"):
-            logger.info(f"Skipping webhook - lead has invalid contact")
+            logger.info("Skipping webhook - lead has invalid contact")
             return
         
         # Deliver webhook
@@ -3150,7 +3150,7 @@ async def send_test_webhook(public_key: str, request: Request, _user: dict = Dep
     if result.get("status") == "success":
         return {
             "success": True,
-            "message": f"Test webhook delivered successfully",
+            "message": "Test webhook delivered successfully",
             "http_status": result.get("http_status"),
             "response": result.get("response", "")[:200]
         }
