@@ -1688,29 +1688,6 @@ async def bootstrap_admin(request: Request):
         status_code=201,
         content={"ok": True, "message": "Bootstrap admin created"}
     )
-    }
-    
-    await db.users.insert_one(user_doc)
-    
-    logger.info(f"Bootstrap admin created successfully: {admin_email} from IP: {client_ip}")
-    
-    return JSONResponse(
-        status_code=201,
-        content={
-            "ok": True,
-            "message": "Admin user created successfully via bootstrap",
-            "user": {
-                "id": user_id,
-                "email": admin_email,
-                "role": "admin"
-            },
-            "next_steps": [
-                "Login with the credentials at /login",
-                "After confirming login works, set BOOTSTRAP_ENABLED=false and redeploy",
-                "Consider changing the password after first login"
-            ]
-        }
-    )
 
 
 # ============================================
