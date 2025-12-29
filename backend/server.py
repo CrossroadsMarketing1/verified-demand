@@ -59,6 +59,8 @@ JWT_SECRET = os.environ.get("JWT_SECRET", "change_this_secret_in_production")
 JWT_EXPIRY_HOURS = int(os.environ.get("JWT_EXPIRY_HOURS", "24"))
 ADMIN_SETUP_KEY = os.environ.get("ADMIN_SETUP_KEY", "")
 AUTH_COOKIE_NAME = "vd_auth_token"
+AUTH_RATE_LIMIT_LOGIN = 10  # Max login attempts per IP per 10 minutes
+AUTH_MIN_PASSWORD_LENGTH = 10  # Minimum password length
 
 def is_smtp_configured() -> bool:
     """Check if SMTP is properly configured"""
