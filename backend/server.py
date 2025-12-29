@@ -67,6 +67,10 @@ def is_sms_configured() -> bool:
         SMS_CONFIG["twilio_from_number"]
     ])
 
+def is_development_mode() -> bool:
+    """Check if running in development mode"""
+    return os.environ.get("ENV", "production").lower() == "development"
+
 # Create the main app without a prefix
 app = FastAPI()
 
