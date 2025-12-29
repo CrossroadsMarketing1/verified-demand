@@ -1648,7 +1648,7 @@ async def admin_create_user(user_data: AdminUserCreate, request: Request, _user:
             "role": user_doc["role"],
             "is_active": user_doc["is_active"]
         },
-        "message": f"User created successfully"
+        "message": "User created successfully"
     }
     
     # Include temp password in response (admin should share this securely)
