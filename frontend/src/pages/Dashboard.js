@@ -729,6 +729,14 @@ const Dashboard = () => {
             <p className="text-sm text-gray-500 mt-1">Analytics & Lead Tracking</p>
           </div>
           <div className="flex items-center gap-3">
+            {currentUser?.role === "admin" && (
+              <Link
+                to="/dashboard/users"
+                className="px-4 py-2 border border-purple-200 text-purple-600 rounded-md hover:bg-purple-50"
+              >
+                Users
+              </Link>
+            )}
             <Link
               to="/dashboard/sites"
               className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
