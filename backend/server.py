@@ -1579,6 +1579,151 @@ async def get_current_user_info(request: Request):
 
 
 # ============================================
+# Production Bootstrap Endpoint
+# ============================================
+
+# Hard rate limit for bootstrap - only 3 attempts per hour per IP
+BOOTSTRAP_RATE_LIMIT = (3, 3600)
+bootstrap_rate_limits = {}
+
+def check_bootstrap_rate_limit(client_ip: str) -> bool:
+    """Check if bootstrap request is within rate limit"""
+    now = datetime.now(timezone.utc).timestamp()
+    max_requests, window = BOOTSTRAP_RATE_LIMIT
+    
+    if client_ip not in bootstrap_rate_limits:
+        bootstrap_rate_limits[client_ip] = []
+    
+    # Clean old entries
+    bootstrap_rate_limits[client_ip] = [
+        ts for ts in bootstrap_rate_limits[client_ip] 
+        if now - ts < window
+    ]
+    
+    if len(bootstrap_rate_limits[client_ip]) >= max_requests:
+        return False
+    
+    bootstrap_rate_limits[client_ip].append(now)
+    return True
+
+
+@api_router.post("/auth/bootstrap-admin")
+async def bootstrap_admin(request: Request):
+    """
+    Bootstrap the first admin user for production deployment.
+    
+    Security:
+    - Only works when BOOTSTRAP_ENABLED=true
+    - Only creates admin if no admin exists OR users count is 0
+    - Uses BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD env vars
+    - Hard rate-limited (3 attempts per hour per IP)
+    - Returns 404 when disabled (hides endpoint existence)
+    """
+    
+    # Check if bootstrap is enabled
+    bootstrap_enabled = os.environ.get("BOOTSTRAP_ENABLED", "false").lower() == "true"
+    
+    if not bootstrap_enabled:
+        # Return 404 to hide the endpoint exists
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    # Hard rate limit check
+    client_ip = get_client_ip(request)
+    if not check_bootstrap_rate_limit(client_ip):
+        logger.warning(f"Bootstrap rate limit exceeded for IP: {client_ip}")
+        return JSONResponse(
+            status_code=429,
+            content={"ok": False, "error": "Too many attempts. Please try again later."}
+        )
+    
+    # Get credentials from environment
+    admin_email = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "").strip().lower()
+    admin_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "")
+    
+    if not admin_email or not admin_password:
+        logger.error("Bootstrap attempted but BOOTSTRAP_ADMIN_EMAIL or BOOTSTRAP_ADMIN_PASSWORD not set")
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Bootstrap credentials not configured"}
+        )
+    
+    # Validate email format
+    if "@" not in admin_email or "." not in admin_email:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Invalid admin email format"}
+        )
+    
+    # Validate password strength
+    if len(admin_password) < 8:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Admin password must be at least 8 characters"}
+        )
+    
+    # Check if any admin already exists
+    existing_admin = await db.users.find_one({"role": "admin"})
+    total_users = await db.users.count_documents({})
+    
+    if existing_admin and total_users > 0:
+        logger.warning(f"Bootstrap attempted but admin already exists: {existing_admin.get('email')}")
+        return JSONResponse(
+            status_code=409,
+            content={
+                "ok": False, 
+                "error": "Admin user already exists. Bootstrap is only allowed when no admin exists."
+            }
+        )
+    
+    # Check if email already exists
+    existing_user = await db.users.find_one({"email": admin_email})
+    if existing_user:
+        logger.warning(f"Bootstrap attempted but email already exists: {admin_email}")
+        return JSONResponse(
+            status_code=409,
+            content={"ok": False, "error": "A user with this email already exists"}
+        )
+    
+    # Create the admin user
+    now = datetime.now(timezone.utc)
+    user_id = str(uuid.uuid4())
+    password_hash = hash_password(admin_password)
+    
+    user_doc = {
+        "id": user_id,
+        "email": admin_email,
+        "password_hash": password_hash,
+        "role": "admin",
+        "is_active": True,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "bootstrap_created": True  # Mark as bootstrap-created for audit
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    logger.info(f"Bootstrap admin created successfully: {admin_email} from IP: {client_ip}")
+    
+    return JSONResponse(
+        status_code=201,
+        content={
+            "ok": True,
+            "message": "Admin user created successfully via bootstrap",
+            "user": {
+                "id": user_id,
+                "email": admin_email,
+                "role": "admin"
+            },
+            "next_steps": [
+                "Login with the credentials at /login",
+                "After confirming login works, set BOOTSTRAP_ENABLED=false and redeploy",
+                "Consider changing the password after first login"
+            ]
+        }
+    )
+
+
+# ============================================
 # Admin User Management Endpoints
 # ============================================
 
