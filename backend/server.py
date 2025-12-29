@@ -2357,11 +2357,14 @@ EMBED_JS = '''
           var response = JSON.parse(xhr.responseText);
           
           if (xhr.status === 200 && response.ok && response.verified) {
-            log("OTP verified successfully, lead created:", response.lead_id);
-            trackEvent("otp_verified", { phone: currentLeadData.phone, lead_id: response.lead_id });
+            log("OTP verified successfully, lead created:", response.lead_id, "unlock_code:", response.unlock_code);
+            trackEvent("otp_verified", { phone: currentLeadData.phone, lead_id: response.lead_id, unlock_code: response.unlock_code });
             trackEvent("lead_submit_verified", currentLeadData);
             
-            // Show success
+            // Store unlock code for success screen
+            currentLeadData.unlock_code = response.unlock_code;
+            
+            // Show success with unlock code
             showSuccess();
           } else {
             // Show error
