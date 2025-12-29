@@ -2028,8 +2028,8 @@ EMBED_JS = '''
   }
 
   // Request OTP from server
-  function requestOTP() {
-    log("Requesting OTP for:", currentLeadData.phone);
+  function requestOTP(isResend) {
+    log("Requesting OTP for:", currentLeadData.phone, isResend ? "(resend)" : "");
     
     var xhr = new XMLHttpRequest();
     xhr.open("POST", config.endpoint + "/api/public/otp/request", true);
@@ -2038,26 +2038,58 @@ EMBED_JS = '''
     xhr.onreadystatechange = function() {
       if (xhr.readyState === 4) {
         var btn = document.getElementById("vd-submit-btn");
+        var resendBtn = document.getElementById("vd-resend-btn");
         
         try {
           var response = JSON.parse(xhr.responseText);
           
           if (xhr.status === 200 && response.ok) {
             log("OTP sent successfully");
-            trackEvent("otp_requested", { phone: currentLeadData.phone });
+            trackEvent("otp_requested", { phone: currentLeadData.phone, isResend: !!isResend });
             
-            // Store dev_code if provided (development mode)
+            // Store cooldown duration (default 30s)
+            currentLeadData.cooldown = response.cooldown || 30;
+            
+            // Store dev_code if provided (ONLY in development mode)
+            // Safety: only store if explicitly provided by backend
             if (response.dev_code) {
               currentLeadData.dev_code = response.dev_code;
+            } else {
+              // Clear any previous dev_code on resend in production
+              delete currentLeadData.dev_code;
             }
             
-            // Move to step 2
-            showStep2(response.message);
+            // Move to step 2 or refresh it for resend
+            if (isResend) {
+              // Show success message and restart cooldown
+              showError("");  // Clear any error
+              var msgDiv = document.getElementById("vd-success-msg");
+              if (msgDiv) {
+                msgDiv.textContent = "New code sent!";
+                msgDiv.style.display = "block";
+                setTimeout(function() { msgDiv.style.display = "none"; }, 3000);
+              }
+              startResendCooldown();
+            } else {
+              showStep2(response.message);
+            }
           } else {
+            // Handle cooldown error specially
+            if (response.cooldown_remaining) {
+              if (resendBtn) {
+                resendBtn.disabled = true;
+                startResendCooldown(response.cooldown_remaining);
+              }
+            }
+            
             // Show error
             if (btn) {
               btn.disabled = false;
               btn.textContent = "Send Verification Code";
+            }
+            if (resendBtn) {
+              resendBtn.disabled = false;
+              resendBtn.textContent = "Resend";
             }
             showError(response.error || "Failed to send verification code. Please try again.");
             log("OTP request failed:", response.error);
@@ -2067,6 +2099,10 @@ EMBED_JS = '''
             btn.disabled = false;
             btn.textContent = "Send Verification Code";
           }
+          if (resendBtn) {
+            resendBtn.disabled = false;
+            resendBtn.textContent = "Resend";
+          }
           showError("An error occurred. Please try again.");
           console.error("[VerifiedDemand] OTP request error:", err);
         }
@@ -2075,9 +2111,14 @@ EMBED_JS = '''
     
     xhr.onerror = function() {
       var btn = document.getElementById("vd-submit-btn");
+      var resendBtn = document.getElementById("vd-resend-btn");
       if (btn) {
         btn.disabled = false;
         btn.textContent = "Send Verification Code";
+      }
+      if (resendBtn) {
+        resendBtn.disabled = false;
+        resendBtn.textContent = "Resend";
       }
       showError("Network error. Please check your connection and try again.");
     };
@@ -2085,8 +2126,43 @@ EMBED_JS = '''
     xhr.send(JSON.stringify(currentLeadData));
   }
 
+  // Resend cooldown timer
+  var resendCooldownInterval = null;
+  
+  function startResendCooldown(initialSeconds) {
+    var seconds = initialSeconds || currentLeadData.cooldown || 30;
+    var resendBtn = document.getElementById("vd-resend-btn");
+    var countdownSpan = document.getElementById("vd-countdown");
+    
+    if (resendCooldownInterval) {
+      clearInterval(resendCooldownInterval);
+    }
+    
+    if (resendBtn) resendBtn.disabled = true;
+    
+    function updateCountdown() {
+      if (countdownSpan) {
+        countdownSpan.textContent = seconds > 0 ? " (" + seconds + "s)" : "";
+      }
+      if (resendBtn) {
+        resendBtn.textContent = seconds > 0 ? "Resend in " + seconds + "s" : "Resend";
+        resendBtn.disabled = seconds > 0;
+      }
+      
+      if (seconds <= 0) {
+        clearInterval(resendCooldownInterval);
+        resendCooldownInterval = null;
+      }
+      seconds--;
+    }
+    
+    updateCountdown();
+    resendCooldownInterval = setInterval(updateCountdown, 1000);
+  }
+
   // Show Step 2: OTP Verification
   function showStep2(message) {
+    // DEV MODE hint - ONLY show if dev_code exists (backend controls this)
     var devCodeHint = "";
     if (currentLeadData.dev_code) {
       devCodeHint = '<div style="padding:10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;color:#92400e;font-size:12px;margin-bottom:12px;text-align:center;"><strong>DEV MODE:</strong> Code is ' + currentLeadData.dev_code + '</div>';
