@@ -576,15 +576,26 @@ const SitesPage = () => {
         
         {sites.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-12 text-center">
-            <div className="text-5xl mb-4">🏢</div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">No Sites Yet</h2>
-            <p className="text-gray-500 mb-6">Create your first site to get started with lead tracking.</p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              Create Your First Site
-            </button>
+            <div className="text-5xl mb-4">{isAdmin ? "🏢" : "📋"}</div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+              {isAdmin ? "No Sites Yet" : "No Sites Assigned"}
+            </h2>
+            <p className="text-gray-500 mb-6">
+              {isAdmin 
+                ? "Create your first site to get started with lead tracking."
+                : "No sites have been assigned to your account. Contact your administrator to get access."
+              }
+            </p>
+            {/* Only show Create button for admins */}
+            {isAdmin && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                data-testid="create-first-site-btn"
+              >
+                Create Your First Site
+              </button>
+            )}
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -628,21 +639,27 @@ const SitesPage = () => {
                         <button
                           onClick={() => setSelectedSite(site)}
                           className="text-blue-600 hover:text-blue-800"
+                          data-testid={`view-site-${site.public_key}`}
                         >
-                          View/Edit
+                          {isAdmin ? "View/Edit" : "View"}
                         </button>
                         <button
                           onClick={() => copySnippet(site.public_key)}
                           className="text-green-600 hover:text-green-800"
+                          data-testid={`copy-snippet-${site.public_key}`}
                         >
                           Copy Snippet
                         </button>
-                        <button
-                          onClick={() => setRotateConfirm(site.public_key)}
-                          className="text-orange-600 hover:text-orange-800"
-                        >
-                          Rotate Key
-                        </button>
+                        {/* Only show Rotate Key for admins */}
+                        {isAdmin && (
+                          <button
+                            onClick={() => setRotateConfirm(site.public_key)}
+                            className="text-orange-600 hover:text-orange-800"
+                            data-testid={`rotate-key-${site.public_key}`}
+                          >
+                            Rotate Key
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
