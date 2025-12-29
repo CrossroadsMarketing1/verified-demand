@@ -283,6 +283,19 @@ def build_lead_email_html(site: dict, lead: dict, timestamp: str) -> str:
     vehicle_summary = format_vehicle_summary(lead.get("vehicle"))
     source_url = lead.get("url") or lead.get("source_url") or "Not provided"
     
+    # Build verification badge and unlock code section
+    verification_badge = ""
+    unlock_code_section = ""
+    if lead.get("is_verified"):
+        verification_badge = '<span style="display:inline-block;background:#dcfce7;color:#166534;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:bold;margin-left:10px;">✓ PHONE VERIFIED</span>'
+        if lead.get("unlock_code"):
+            unlock_code_section = f'''
+                <div style="background:#f0f9ff;border:2px solid #0ea5e9;border-radius:8px;padding:15px;margin:15px 0;text-align:center;">
+                    <div style="font-size:12px;color:#0369a1;text-transform:uppercase;font-weight:bold;margin-bottom:5px;">Confirmation Code</div>
+                    <div style="font-size:28px;font-weight:bold;color:#0c4a6e;letter-spacing:2px;">{lead.get("unlock_code")}</div>
+                </div>
+            '''
+    
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -301,10 +314,11 @@ def build_lead_email_html(site: dict, lead: dict, timestamp: str) -> str:
     <body>
         <div class="container">
             <div class="header">
-                <h2 style="margin: 0;">🎉 New Lead Received!</h2>
+                <h2 style="margin: 0;">🎉 New Lead Received! {verification_badge}</h2>
                 <p style="margin: 5px 0 0 0; opacity: 0.9;">{site.get('name', 'Unknown Site')}</p>
             </div>
             <div class="content">
+                {unlock_code_section}
                 <div class="lead-info">
                     <div class="label">Contact Name</div>
                     <div class="value">{lead.get('name', 'Not provided')}</div>
@@ -347,8 +361,15 @@ def build_lead_email_text(site: dict, lead: dict, timestamp: str) -> str:
     vehicle_summary = format_vehicle_summary(lead.get("vehicle"))
     source_url = lead.get("url") or lead.get("source_url") or "Not provided"
     
+    # Build verification and unlock code section for text email
+    verification_text = ""
+    if lead.get("is_verified"):
+        verification_text = " [✓ PHONE VERIFIED]"
+        if lead.get("unlock_code"):
+            verification_text += f"\n\n*** CONFIRMATION CODE: {lead.get('unlock_code')} ***\n"
+    
     text = f"""
-New Lead Received!
+New Lead Received!{verification_text}
 ==================
 
 Site: {site.get('name', 'Unknown Site')} {f"({site.get('domain')})" if site.get('domain') else ""}
