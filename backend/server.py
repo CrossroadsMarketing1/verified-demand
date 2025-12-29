@@ -784,8 +784,8 @@ async def request_otp(otp_req: OTPRequest, request: Request):
             headers=CORS_HEADERS
         )
     
-    # Check if SMS is configured
-    if not is_sms_configured():
+    # Check if SMS is configured (or development mode for mock)
+    if not is_sms_configured() and not is_development_mode():
         return Response(
             content='{"ok":false,"error":"SMS verification is not configured. Please contact support."}',
             status_code=503,
@@ -826,9 +826,9 @@ async def request_otp(otp_req: OTPRequest, request: Request):
     
     await db.otp_verifications.insert_one(otp_doc)
     
-    # Send SMS
+    # Send SMS (or mock in development)
     sms_message = f"Your verification code is {otp_code}. It expires in 10 minutes."
-    sms_sent = await send_sms(normalized_phone, sms_message)
+    sms_sent, dev_code = await send_sms(normalized_phone, sms_message, otp_code)
     
     if not sms_sent:
         # Update status to failed
@@ -845,8 +845,19 @@ async def request_otp(otp_req: OTPRequest, request: Request):
     
     logger.info(f"OTP requested for phone {normalized_phone}, key {otp_req.public_key}")
     
+    # Build response - include dev_code only in development mode
+    response_data = {
+        "ok": True,
+        "expires_in": OTP_EXPIRY_SECONDS,
+        "message": "Verification code sent to your phone."
+    }
+    if dev_code and is_development_mode():
+        response_data["dev_code"] = dev_code
+        response_data["message"] = f"[DEV MODE] Code: {dev_code} - Also logged to server console."
+    
+    import json
     return Response(
-        content=f'{{"ok":true,"expires_in":{OTP_EXPIRY_SECONDS},"message":"Verification code sent to your phone."}}',
+        content=json.dumps(response_data),
         media_type="application/json",
         headers=CORS_HEADERS
     )
