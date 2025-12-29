@@ -424,23 +424,12 @@ const SitesPage = () => {
   const [rotateConfirm, setRotateConfirm] = useState(null);
   const [rotating, setRotating] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [userLoading, setUserLoading] = useState(true);
   
-  const fetchSites = useCallback(async () => {
-    try {
-      const response = await axios.get(`${API}/dashboard/sites`);
-      setSites(response.data.sites || []);
-    } catch (err) {
-      setError("Failed to load sites");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Check if current user is admin
+  const isAdmin = currentUser?.role === "admin";
   
-  useEffect(() => {
-    fetchSites();
-  }, [fetchSites]);
-  
-  // Fetch current user
+  // Fetch current user first
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
@@ -450,10 +439,33 @@ const SitesPage = () => {
         }
       } catch (e) {
         console.error("Failed to fetch current user:", e);
+      } finally {
+        setUserLoading(false);
       }
     };
     fetchCurrentUser();
   }, []);
+  
+  const fetchSites = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API}/dashboard/sites`);
+      setSites(response.data.sites || []);
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setError("Access denied");
+      } else {
+        setError("Failed to load sites");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  
+  useEffect(() => {
+    if (!userLoading) {
+      fetchSites();
+    }
+  }, [fetchSites, userLoading]);
   
   const handleCreateSuccess = (newSite) => {
     setSites([newSite, ...sites]);
@@ -480,7 +492,11 @@ const SitesPage = () => {
         alert(`Key rotated! New key: ${response.data.new_key}`);
       }
     } catch (err) {
-      alert("Failed to rotate key");
+      if (err.response?.status === 403) {
+        alert("Admin access required to rotate keys");
+      } else {
+        alert("Failed to rotate key");
+      }
     } finally {
       setRotating(false);
       setRotateConfirm(null);
@@ -497,7 +513,8 @@ const SitesPage = () => {
     alert("Snippet copied to clipboard!");
   };
   
-  if (loading) {
+  // Loading state - wait for both user and sites
+  if (loading || userLoading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-gray-500">Loading sites...</div>
