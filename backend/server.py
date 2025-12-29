@@ -2627,7 +2627,11 @@ async def create_site(site: SiteCreate, request: Request, _user: dict = Depends(
         "allowed_domains": allowed_domains,
         "previous_public_keys": [],
         "owner_user_id": _user["id"],  # Site ownership for RBAC
-        "allowed_user_ids": []  # Additional users with access (optional)
+        "allowed_user_ids": [],  # Additional users with access (optional)
+        # Webhook configuration
+        "verified_lead_webhook_url": site.verified_lead_webhook_url,
+        "webhook_secret": site.webhook_secret or secrets.token_hex(16),
+        "webhook_enabled": site.webhook_enabled if site.webhook_enabled is not None else True
     }
     
     await db.sites.insert_one(doc)
