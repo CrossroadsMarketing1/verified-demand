@@ -185,7 +185,7 @@ const DomainStatusBadge = ({ status, domain }) => {
 };
 
 // Leads Table Component
-const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlagged, onToggleHideFlagged, hideDomainMismatch, onToggleHideDomainMismatch, showOnlyVerified, onToggleShowOnlyVerified }) => {
+const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlagged, onToggleHideFlagged, hideDomainMismatch, onToggleHideDomainMismatch, showOnlyVerified, onToggleShowOnlyVerified, showOnlyWithCode, onToggleShowOnlyWithCode }) => {
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Loading leads...</div>;
   }
@@ -201,9 +201,13 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
   if (showOnlyVerified) {
     displayLeads = displayLeads.filter(lead => lead.is_verified === true);
   }
+  if (showOnlyWithCode) {
+    displayLeads = displayLeads.filter(lead => lead.unlock_code);
+  }
   
   const hiddenCount = leads.length - displayLeads.length;
   const verifiedCount = leads.filter(l => l.is_verified === true).length;
+  const withCodeCount = leads.filter(l => l.unlock_code).length;
   
   return (
     <div>
