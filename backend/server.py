@@ -811,6 +811,19 @@ class UserResponse(BaseModel):
     created_at: str
 
 
+class AdminUserCreate(BaseModel):
+    """Admin creates a new user"""
+    email: str
+    role: Optional[str] = "user"
+    send_temp_password: Optional[bool] = True  # If true, generates and returns temp password
+
+
+class AdminUserUpdate(BaseModel):
+    """Admin updates a user"""
+    is_active: Optional[bool] = None
+    role: Optional[str] = None
+
+
 def generate_otp_code() -> str:
     """Generate a 6-digit OTP code"""
     return str(random.randint(100000, 999999))
