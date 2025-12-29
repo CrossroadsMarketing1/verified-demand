@@ -1768,8 +1768,10 @@ async def get_dashboard_events(
 
 @api_router.get("/dashboard/event-types")
 async def get_event_types(
+    request: Request,
     public_key: Optional[str] = Query(None, alias="public_key", description="Public key to filter by"),
-    publicKey: Optional[str] = Query(None, description="Public key (alternative param name)")
+    publicKey: Optional[str] = Query(None, description="Public key (alternative param name)"),
+    _user: dict = Depends(require_auth)
 ):
     """Get distinct event types for a public key"""
     
