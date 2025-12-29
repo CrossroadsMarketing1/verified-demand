@@ -461,6 +461,14 @@ function App() {
                 </ProtectedRoute>
               } 
             />
+            <Route 
+              path="/dashboard/users" 
+              element={
+                <AdminRoute>
+                  <UsersPage />
+                </AdminRoute>
+              } 
+            />
           </Routes>
         </AuthProvider>
       </BrowserRouter>
