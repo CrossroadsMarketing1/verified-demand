@@ -912,6 +912,8 @@ const Dashboard = () => {
                     onToggleHideDomainMismatch={setHideDomainMismatch}
                     showOnlyVerified={showOnlyVerified}
                     onToggleShowOnlyVerified={setShowOnlyVerified}
+                    showOnlyWithCode={showOnlyWithCode}
+                    onToggleShowOnlyWithCode={setShowOnlyWithCode}
                   />
                 )}
                 {activeTab === "events" && (
