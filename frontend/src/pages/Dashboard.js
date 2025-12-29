@@ -755,6 +755,8 @@ const Dashboard = () => {
                     skip={leadsSkip}
                     limit={limit}
                     onPageChange={(newSkip) => fetchLeads(newSkip)}
+                    hideFlagged={hideFlaggedLeads}
+                    onToggleHideFlagged={setHideFlaggedLeads}
                   />
                 )}
                 {activeTab === "events" && (
