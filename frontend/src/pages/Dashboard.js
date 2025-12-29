@@ -195,21 +195,23 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
             </span>
             <div className="flex gap-2">
               <button
-            onClick={() => onPageChange(Math.max(0, skip - limit))}
-            disabled={skip === 0}
-            className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => onPageChange(skip + limit)}
-            disabled={skip + limit >= total}
-            className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-          >
-            Next
-          </button>
-        </div>
-      </div>
+                onClick={() => onPageChange(Math.max(0, skip - limit))}
+                disabled={skip === 0}
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => onPageChange(skip + limit)}
+                disabled={skip + limit >= total}
+                className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
