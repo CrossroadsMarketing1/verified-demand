@@ -2887,6 +2887,312 @@ async def resolve_site_by_key(key: str) -> Optional[dict]:
 
 
 # ============================================
+# Webhook Delivery System
+# ============================================
+
+import httpx
+import hmac
+
+WEBHOOK_RETRY_DELAYS = [60, 300, 900]  # 1 min, 5 min, 15 min
+WEBHOOK_TIMEOUT = 30  # seconds
+
+
+def generate_webhook_signature(payload: str, secret: str) -> str:
+    """Generate HMAC-SHA256 signature for webhook payload"""
+    return hmac.new(
+        secret.encode('utf-8'),
+        payload.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+
+
+async def log_webhook_delivery(
+    site_public_key: str,
+    lead_id: str,
+    event: str,
+    url: str,
+    status: str,
+    http_status: Optional[int],
+    response_snippet: str,
+    attempt: int
+):
+    """Log webhook delivery attempt to database"""
+    doc = {
+        "id": str(uuid.uuid4()),
+        "site_public_key": site_public_key,
+        "lead_id": lead_id,
+        "event": event,
+        "url": url,
+        "status": status,
+        "http_status": http_status,
+        "response_snippet": response_snippet[:500] if response_snippet else "",
+        "attempt": attempt,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.webhook_deliveries.insert_one(doc)
+    return doc
+
+
+async def deliver_webhook(
+    site: dict,
+    lead: dict,
+    event: str = "verified_lead.created",
+    is_test: bool = False
+):
+    """
+    Deliver webhook to site's configured URL.
+    Includes retry logic for failed deliveries.
+    """
+    webhook_url = site.get("verified_lead_webhook_url")
+    webhook_secret = site.get("webhook_secret")
+    webhook_enabled = site.get("webhook_enabled", True)
+    
+    if not webhook_url:
+        logger.info(f"No webhook URL configured for site {site.get('public_key')}")
+        return {"status": "skipped", "reason": "no_webhook_url"}
+    
+    if not webhook_enabled and not is_test:
+        logger.info(f"Webhook disabled for site {site.get('public_key')}")
+        return {"status": "skipped", "reason": "webhook_disabled"}
+    
+    # Build payload
+    timestamp = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "event": event if not is_test else "test.webhook",
+        "timestamp": timestamp,
+        "site": {
+            "name": site.get("name"),
+            "domain": site.get("domain"),
+            "public_key": site.get("public_key")
+        },
+        "lead": {
+            "lead_id": lead.get("id") or str(lead.get("_id", "")),
+            "created_at": lead.get("server_timestamp") or lead.get("timestamp"),
+            "name": lead.get("name"),
+            "email": lead.get("email"),
+            "phone": lead.get("phone"),
+            "unlock_code": lead.get("unlock_code"),
+            "is_verified": lead.get("is_verified", False),
+            "verification_method": lead.get("verification_method"),
+            "vehicle": lead.get("vehicle") or {},
+            "source_url": lead.get("url") or lead.get("source_url"),
+            "source_domain": lead.get("source_domain"),
+            "domain_status": lead.get("domain_status")
+        }
+    }
+    
+    payload_json = json.dumps(payload)
+    
+    # Build headers
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "VerifiedDemand-Webhook/1.0",
+        "X-VD-Event": event if not is_test else "test.webhook",
+        "X-VD-Timestamp": timestamp
+    }
+    
+    # Add signature if secret configured
+    if webhook_secret:
+        signature = generate_webhook_signature(payload_json, webhook_secret)
+        headers["X-VD-Signature"] = signature
+    
+    # Attempt delivery with retries
+    max_attempts = 1 if is_test else len(WEBHOOK_RETRY_DELAYS) + 1
+    last_error = None
+    last_status = None
+    last_response = ""
+    
+    for attempt in range(1, max_attempts + 1):
+        try:
+            async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT) as client:
+                response = await client.post(webhook_url, content=payload_json, headers=headers)
+                last_status = response.status_code
+                last_response = response.text[:500] if response.text else ""
+                
+                if response.status_code >= 200 and response.status_code < 300:
+                    # Success
+                    await log_webhook_delivery(
+                        site_public_key=site.get("public_key"),
+                        lead_id=lead.get("id") or str(lead.get("_id", "")),
+                        event=event if not is_test else "test.webhook",
+                        url=webhook_url,
+                        status="success",
+                        http_status=response.status_code,
+                        response_snippet=last_response,
+                        attempt=attempt
+                    )
+                    logger.info(f"Webhook delivered successfully to {webhook_url} (status {response.status_code})")
+                    return {
+                        "status": "success",
+                        "http_status": response.status_code,
+                        "attempt": attempt,
+                        "response": last_response
+                    }
+                else:
+                    last_error = f"HTTP {response.status_code}"
+                    logger.warning(f"Webhook delivery failed to {webhook_url}: {last_error}")
+                    
+        except httpx.TimeoutException:
+            last_error = "Timeout"
+            last_status = None
+            logger.warning(f"Webhook delivery timeout to {webhook_url}")
+        except Exception as e:
+            last_error = str(e)
+            last_status = None
+            logger.error(f"Webhook delivery error to {webhook_url}: {e}")
+        
+        # If not last attempt, wait before retry
+        if attempt < max_attempts:
+            delay = WEBHOOK_RETRY_DELAYS[attempt - 1] if attempt <= len(WEBHOOK_RETRY_DELAYS) else WEBHOOK_RETRY_DELAYS[-1]
+            logger.info(f"Retrying webhook in {delay}s (attempt {attempt + 1}/{max_attempts})")
+            await asyncio.sleep(delay)
+    
+    # All attempts failed
+    await log_webhook_delivery(
+        site_public_key=site.get("public_key"),
+        lead_id=lead.get("id") or str(lead.get("_id", "")),
+        event=event if not is_test else "test.webhook",
+        url=webhook_url,
+        status="failed",
+        http_status=last_status,
+        response_snippet=last_response or last_error or "Unknown error",
+        attempt=max_attempts
+    )
+    
+    return {
+        "status": "failed",
+        "error": last_error,
+        "http_status": last_status,
+        "attempts": max_attempts,
+        "response": last_response
+    }
+
+
+async def trigger_verified_lead_webhook(lead_doc: dict, public_key: str):
+    """
+    Background task to trigger webhook for a verified lead.
+    Only fires if:
+    - Lead is verified
+    - Domain status is 'verified'
+    - Site has webhook configured and enabled
+    """
+    try:
+        # Get site
+        site = await resolve_site_by_key(public_key)
+        if not site:
+            logger.warning(f"Site not found for webhook trigger: {public_key}")
+            return
+        
+        # Check conditions
+        if not lead_doc.get("is_verified"):
+            logger.info(f"Skipping webhook - lead not verified")
+            return
+        
+        if lead_doc.get("domain_status") != "verified":
+            logger.info(f"Skipping webhook - domain_status is {lead_doc.get('domain_status')}, not 'verified'")
+            return
+        
+        if lead_doc.get("is_suspected_spam"):
+            logger.info(f"Skipping webhook - lead is suspected spam")
+            return
+        
+        if lead_doc.get("is_invalid_contact"):
+            logger.info(f"Skipping webhook - lead has invalid contact")
+            return
+        
+        # Deliver webhook
+        result = await deliver_webhook(site, lead_doc)
+        logger.info(f"Webhook trigger result: {result.get('status')}")
+        
+    except Exception as e:
+        logger.error(f"Error triggering webhook: {e}")
+
+
+@api_router.post("/dashboard/sites/{public_key}/send-test-webhook")
+async def send_test_webhook(public_key: str, request: Request, _user: dict = Depends(require_admin)):
+    """Send a test webhook to verify configuration (Admin only)"""
+    
+    site = await db.sites.find_one({"public_key": public_key})
+    if not site:
+        return {"success": False, "error": "Site not found"}
+    
+    webhook_url = site.get("verified_lead_webhook_url")
+    if not webhook_url:
+        return {"success": False, "error": "No webhook URL configured for this site"}
+    
+    # Create sample lead data for test
+    sample_lead = {
+        "id": "test-" + str(uuid.uuid4())[:8],
+        "server_timestamp": datetime.now(timezone.utc).isoformat(),
+        "name": "Test Customer",
+        "email": "test@example.com",
+        "phone": "555-123-4567",
+        "unlock_code": "VD-TEST123",
+        "is_verified": True,
+        "verification_method": "sms_otp",
+        "vehicle": {
+            "year": "2024",
+            "make": "Test",
+            "model": "Vehicle",
+            "trim": "Test Trim"
+        },
+        "url": "https://example.com/test-page",
+        "source_domain": site.get("domain") or "example.com",
+        "domain_status": "verified"
+    }
+    
+    # Deliver test webhook (no retries)
+    result = await deliver_webhook(site, sample_lead, is_test=True)
+    
+    if result.get("status") == "success":
+        return {
+            "success": True,
+            "message": f"Test webhook delivered successfully",
+            "http_status": result.get("http_status"),
+            "response": result.get("response", "")[:200]
+        }
+    else:
+        return {
+            "success": False,
+            "error": result.get("error", "Unknown error"),
+            "http_status": result.get("http_status"),
+            "response": result.get("response", "")[:200]
+        }
+
+
+@api_router.get("/dashboard/sites/{public_key}/webhook-logs")
+async def get_webhook_logs(
+    public_key: str,
+    request: Request,
+    limit: int = Query(20, ge=1, le=100),
+    _user: dict = Depends(require_auth)
+):
+    """Get recent webhook delivery logs for a site"""
+    
+    site = await db.sites.find_one({"public_key": public_key})
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    
+    # Check access for non-admin users
+    if _user.get("role") != "admin":
+        can_access = await user_can_access_site(_user, public_key)
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Access denied to this site")
+    
+    # Fetch recent webhook logs
+    cursor = db.webhook_deliveries.find(
+        {"site_public_key": public_key}
+    ).sort("created_at", -1).limit(limit)
+    
+    logs = await cursor.to_list(length=limit)
+    
+    return {
+        "logs": [serialize_doc(log) for log in logs],
+        "total": len(logs)
+    }
+
+
+# ============================================
 # Embed.js script - served from /api/embed.js
 # ============================================
 EMBED_JS = '''
