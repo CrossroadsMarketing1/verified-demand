@@ -838,6 +838,8 @@ const Dashboard = () => {
                     onToggleHideFlagged={setHideFlaggedLeads}
                     hideDomainMismatch={hideDomainMismatch}
                     onToggleHideDomainMismatch={setHideDomainMismatch}
+                    showOnlyVerified={showOnlyVerified}
+                    onToggleShowOnlyVerified={setShowOnlyVerified}
                   />
                 )}
                 {activeTab === "events" && (
