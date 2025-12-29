@@ -2577,6 +2577,8 @@ async def create_indexes():
             ("publicKey", 1),
             ("server_timestamp", -1)
         ])
+        # Unique index for unlock_code (sparse to allow null/missing values for legacy leads)
+        await db.vehicle_leads.create_index("unlock_code", unique=True, sparse=True)
         
         # Indexes for sites collection
         await db.sites.create_index("public_key", unique=True)
