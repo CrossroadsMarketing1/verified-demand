@@ -1582,8 +1582,8 @@ async def get_current_user_info(request: Request):
 # Production Bootstrap Endpoint
 # ============================================
 
-# Hard rate limit for bootstrap - only 3 attempts per hour per IP
-BOOTSTRAP_RATE_LIMIT = (3, 3600)
+# Hard rate limit for bootstrap - only 3 attempts per minute per IP
+BOOTSTRAP_RATE_LIMIT = (3, 60)  # 3 requests per 60 seconds
 bootstrap_rate_limits = {}
 
 def check_bootstrap_rate_limit(client_ip: str) -> bool:
@@ -1616,8 +1616,9 @@ async def bootstrap_admin(request: Request):
     - Only works when BOOTSTRAP_ENABLED=true
     - Only creates admin if no admin exists OR users count is 0
     - Uses BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD env vars
-    - Hard rate-limited (3 attempts per hour per IP)
+    - Hard rate-limited (3 attempts per minute per IP)
     - Returns 404 when disabled (hides endpoint existence)
+    - Generic responses to prevent information leakage
     """
     
     # Check if bootstrap is enabled
@@ -1631,57 +1632,35 @@ async def bootstrap_admin(request: Request):
     client_ip = get_client_ip(request)
     if not check_bootstrap_rate_limit(client_ip):
         logger.warning(f"Bootstrap rate limit exceeded for IP: {client_ip}")
-        return JSONResponse(
-            status_code=429,
-            content={"ok": False, "error": "Too many attempts. Please try again later."}
-        )
+        raise HTTPException(status_code=429, detail="Too many requests")
     
     # Get credentials from environment
     admin_email = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "").strip().lower()
     admin_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "")
     
     if not admin_email or not admin_password:
-        logger.error("Bootstrap attempted but BOOTSTRAP_ADMIN_EMAIL or BOOTSTRAP_ADMIN_PASSWORD not set")
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "error": "Bootstrap credentials not configured"}
-        )
+        logger.error("Bootstrap attempted but credentials not configured")
+        raise HTTPException(status_code=500, detail="Bootstrap not configured")
     
     # Validate email format
     if "@" not in admin_email or "." not in admin_email:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "error": "Invalid admin email format"}
-        )
+        logger.error("Bootstrap email format invalid")
+        raise HTTPException(status_code=500, detail="Bootstrap not configured")
     
     # Validate password strength
     if len(admin_password) < 8:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "error": "Admin password must be at least 8 characters"}
-        )
+        logger.error("Bootstrap password too short")
+        raise HTTPException(status_code=500, detail="Bootstrap not configured")
     
-    # Check if any admin already exists
+    # Check if any admin already exists OR if any users exist
     existing_admin = await db.users.find_one({"role": "admin"})
     total_users = await db.users.count_documents({})
     
-    if existing_admin and total_users > 0:
-        logger.warning(f"Bootstrap attempted but admin already exists: {existing_admin.get('email')}")
+    if existing_admin or total_users > 0:
+        logger.warning(f"Bootstrap attempted but users already exist (count: {total_users})")
         return JSONResponse(
             status_code=409,
-            content={
-                "ok": False, 
-                "error": "Admin user already exists. Bootstrap is only allowed when no admin exists."
-            }
-        )
-    
-    # Check if email already exists
-    existing_user = await db.users.find_one({"email": admin_email})
-    if existing_user:
-        logger.warning(f"Bootstrap attempted but email already exists: {admin_email}")
-        return JSONResponse(
-            status_code=409,
-            content={"ok": False, "error": "A user with this email already exists"}
+            content={"ok": False, "error": "Bootstrap not available"}
         )
     
     # Create the admin user
@@ -1698,6 +1677,17 @@ async def bootstrap_admin(request: Request):
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "bootstrap_created": True  # Mark as bootstrap-created for audit
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    logger.info(f"Bootstrap admin created successfully from IP: {client_ip}")
+    
+    # Generic success response - no sensitive info
+    return JSONResponse(
+        status_code=201,
+        content={"ok": True, "message": "Bootstrap admin created"}
+    )
     }
     
     await db.users.insert_one(user_doc)
