@@ -112,7 +112,7 @@ const VerifiedBadge = ({ lead }) => {
 
 // Unlock code display with copy button
 const UnlockCodeCell = ({ code }) => {
-  const [copied, setCopied] = React.useState(false);
+  const [copied, setCopied] = useState(false);
   
   const handleCopy = async () => {
     if (!code) return;
