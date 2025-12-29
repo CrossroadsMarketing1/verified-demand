@@ -423,6 +423,7 @@ const SitesPage = () => {
   const [selectedSite, setSelectedSite] = useState(null);
   const [rotateConfirm, setRotateConfirm] = useState(null);
   const [rotating, setRotating] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   
   const fetchSites = useCallback(async () => {
     try {
@@ -438,6 +439,21 @@ const SitesPage = () => {
   useEffect(() => {
     fetchSites();
   }, [fetchSites]);
+  
+  // Fetch current user
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await axios.get(`${API}/auth/me`);
+        if (response.data.ok) {
+          setCurrentUser(response.data.user);
+        }
+      } catch (e) {
+        console.error("Failed to fetch current user:", e);
+      }
+    };
+    fetchCurrentUser();
+  }, []);
   
   const handleCreateSuccess = (newSite) => {
     setSites([newSite, ...sites]);
