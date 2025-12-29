@@ -422,12 +422,25 @@ async def send_lead_notification(lead: dict):
 
 
 @api_router.post("/track")
-async def track_event(event: TrackEvent):
+async def track_event(event: TrackEvent, request: Request):
     """Receive tracking events from embed.js"""
     doc = event.model_dump()
     doc['server_timestamp'] = datetime.now(timezone.utc).isoformat()
+    
+    # Extract source domain
+    source_domain = extract_request_domain(request, event.url)
+    doc['source_domain'] = source_domain
+    
+    # Check domain status
+    site = await resolve_site_by_public_key(event.publicKey)
+    if site:
+        allowlist = get_site_allowlist(site)
+        doc['domain_status'] = check_domain_status(source_domain, allowlist)
+    else:
+        doc['domain_status'] = 'unknown'
+    
     await db.tracking_events.insert_one(doc)
-    logger.info(f"Tracked event: {event.event} for key: {event.publicKey}")
+    logger.info(f"Tracked event: {event.event} for key: {event.publicKey}, domain: {source_domain}, status: {doc['domain_status']}")
     return Response(
         content='{"status":"ok"}',
         media_type="application/json",
@@ -443,12 +456,25 @@ async def track_options():
 
 # Public endpoints for embed.js
 @api_router.post("/public/track")
-async def public_track_event(event: TrackEvent):
+async def public_track_event(event: TrackEvent, request: Request):
     """Public tracking endpoint for embed.js"""
     doc = event.model_dump()
     doc['server_timestamp'] = datetime.now(timezone.utc).isoformat()
+    
+    # Extract source domain
+    source_domain = extract_request_domain(request, event.url)
+    doc['source_domain'] = source_domain
+    
+    # Check domain status
+    site = await resolve_site_by_public_key(event.publicKey)
+    if site:
+        allowlist = get_site_allowlist(site)
+        doc['domain_status'] = check_domain_status(source_domain, allowlist)
+    else:
+        doc['domain_status'] = 'unknown'
+    
     await db.tracking_events.insert_one(doc)
-    logger.info(f"Public tracked event: {event.event} for key: {event.publicKey}")
+    logger.info(f"Public tracked event: {event.event} for key: {event.publicKey}, domain: {source_domain}, status: {doc['domain_status']}")
     return Response(
         content='{"status":"ok"}',
         media_type="application/json",
