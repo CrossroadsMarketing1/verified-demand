@@ -377,6 +377,7 @@ const Dashboard = () => {
   
   // Filter state
   const [hideFlaggedLeads, setHideFlaggedLeads] = useState(false);
+  const [hideDomainMismatch, setHideDomainMismatch] = useState(false);
   
   // Pagination
   const [leadsSkip, setLeadsSkip] = useState(0);
