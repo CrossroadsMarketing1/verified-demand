@@ -369,7 +369,7 @@ async def public_track_options():
 
 
 @api_router.post("/public/vehicle-lead")
-async def submit_vehicle_lead(lead: VehicleLead):
+async def submit_vehicle_lead(lead: VehicleLead, background_tasks: BackgroundTasks):
     """Receive lead submissions from embed.js modal"""
     doc = lead.model_dump()
     doc['id'] = str(uuid.uuid4())
@@ -377,6 +377,10 @@ async def submit_vehicle_lead(lead: VehicleLead):
     doc['status'] = 'new'
     await db.vehicle_leads.insert_one(doc)
     logger.info(f"Lead submitted: {lead.email} for key: {lead.publicKey}")
+    
+    # Send notification email in background (don't block response)
+    background_tasks.add_task(send_lead_notification, doc)
+    
     return Response(
         content='{"status":"ok","message":"Lead received"}',
         media_type="application/json",
