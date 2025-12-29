@@ -526,6 +526,16 @@ async def submit_vehicle_lead(lead: VehicleLead, request: Request, background_ta
     normalized_phone, phone_valid = validate_phone(lead.phone)
     is_invalid_contact = not email_valid or not phone_valid
     
+    # Extract source domain and check domain status
+    source_domain = extract_request_domain(request, lead.url)
+    site = await resolve_site_by_public_key(lead.publicKey)
+    
+    if site:
+        allowlist = get_site_allowlist(site)
+        domain_status = check_domain_status(source_domain, allowlist)
+    else:
+        domain_status = 'unknown'
+    
     # Build lead document
     doc = lead.model_dump()
     doc['id'] = str(uuid.uuid4())
@@ -539,7 +549,8 @@ async def submit_vehicle_lead(lead: VehicleLead, request: Request, background_ta
     doc['phone_valid'] = phone_valid
     doc['source_ip'] = client_ip
     doc['source_user_agent'] = user_agent
-    doc['domain_status'] = 'unknown'
+    doc['source_domain'] = source_domain
+    doc['domain_status'] = domain_status
     
     # Store normalized values
     doc['email'] = normalized_email
@@ -556,11 +567,14 @@ async def submit_vehicle_lead(lead: VehicleLead, request: Request, background_ta
         logger.warning(f"Suspected spam lead from {client_ip}: {normalized_email}")
     elif is_invalid_contact:
         logger.info(f"Lead with invalid contact from {client_ip}: email_valid={email_valid}, phone_valid={phone_valid}")
+    elif domain_status == 'mismatch':
+        logger.warning(f"Lead from mismatched domain {source_domain} for key: {lead.publicKey}")
     else:
-        logger.info(f"Lead submitted: {normalized_email} for key: {lead.publicKey}")
+        logger.info(f"Lead submitted: {normalized_email} for key: {lead.publicKey}, domain: {source_domain}")
     
-    # Only send notification if not spam and contact is valid
-    if not is_spam and not is_invalid_contact:
+    # Only send notification if not spam, contact is valid, AND domain is not mismatched
+    should_notify = not is_spam and not is_invalid_contact and domain_status != 'mismatch'
+    if should_notify:
         background_tasks.add_task(send_lead_notification, doc)
     
     # Always return 200 to avoid giving bots feedback
