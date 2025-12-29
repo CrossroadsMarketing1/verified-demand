@@ -2242,11 +2242,15 @@ EMBED_JS = '''
     // Focus first input
     otpInputs[0].focus();
     
+    // Start resend cooldown timer immediately
+    startResendCooldown();
+    
     // Resend button
     document.getElementById("vd-resend-btn").addEventListener("click", function() {
+      if (this.disabled) return;
       this.disabled = true;
       this.textContent = "Sending...";
-      requestOTP();
+      requestOTP(true);  // true = isResend
     });
     
     // Verify form
