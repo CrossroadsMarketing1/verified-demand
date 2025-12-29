@@ -1614,7 +1614,7 @@ async def bootstrap_admin(request: Request):
     
     Security:
     - Only works when BOOTSTRAP_ENABLED=true
-    - Only creates admin if no admin exists OR users count is 0
+    - Only creates admin if no admin exists
     - Uses BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD env vars
     - Hard rate-limited (3 attempts per minute per IP)
     - Returns 404 when disabled (hides endpoint existence)
@@ -1638,26 +1638,35 @@ async def bootstrap_admin(request: Request):
     admin_email = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "").strip().lower()
     admin_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "")
     
+    # If credentials not configured, return generic 409 (same as "not available")
     if not admin_email or not admin_password:
         logger.error("Bootstrap attempted but credentials not configured")
-        raise HTTPException(status_code=500, detail="Bootstrap not configured")
+        return JSONResponse(
+            status_code=409,
+            content={"ok": False, "error": "Bootstrap not available"}
+        )
     
-    # Validate email format
+    # Validate email format - return generic 409 if invalid
     if "@" not in admin_email or "." not in admin_email:
         logger.error("Bootstrap email format invalid")
-        raise HTTPException(status_code=500, detail="Bootstrap not configured")
+        return JSONResponse(
+            status_code=409,
+            content={"ok": False, "error": "Bootstrap not available"}
+        )
     
-    # Validate password strength
+    # Validate password strength - return generic 409 if too short
     if len(admin_password) < 8:
         logger.error("Bootstrap password too short")
-        raise HTTPException(status_code=500, detail="Bootstrap not configured")
+        return JSONResponse(
+            status_code=409,
+            content={"ok": False, "error": "Bootstrap not available"}
+        )
     
-    # Check if any admin already exists OR if any users exist
+    # Check if any admin already exists (only check - no users.count requirement)
     existing_admin = await db.users.find_one({"role": "admin"})
-    total_users = await db.users.count_documents({})
     
-    if existing_admin or total_users > 0:
-        logger.warning(f"Bootstrap attempted but users already exist (count: {total_users})")
+    if existing_admin:
+        logger.warning("Bootstrap attempted but admin already exists")
         return JSONResponse(
             status_code=409,
             content={"ok": False, "error": "Bootstrap not available"}
