@@ -10,13 +10,18 @@ const EMBED_URL = `${BACKEND_URL}/api/embed.js`;
 axios.defaults.withCredentials = true;
 
 // Modal Component
-const Modal = ({ isOpen, onClose, title, children }) => {
+const Modal = ({ isOpen, onClose, title, children, size = "default" }) => {
   if (!isOpen) return null;
+  
+  const sizeClasses = {
+    default: "max-w-lg",
+    large: "max-w-2xl"
+  };
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-auto">
-        <div className="flex items-center justify-between p-4 border-b">
+      <div className={`bg-white rounded-lg shadow-xl ${sizeClasses[size] || sizeClasses.default} w-full mx-4 max-h-[90vh] flex flex-col`}>
+        <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <button
             onClick={onClose}
@@ -25,7 +30,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
             &times;
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-4 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );
