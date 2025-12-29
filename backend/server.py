@@ -1325,6 +1325,199 @@ def redact_pii(value: str, show_chars: int = 3) -> str:
     return value[:show_chars] + "***" + value[-show_chars:]
 
 
+# ============================================
+# Authentication Endpoints
+# ============================================
+
+@api_router.post("/auth/register")
+async def register_user(user_data: UserRegister):
+    """Register a new user. First admin requires ADMIN_SETUP_KEY."""
+    
+    # Validate email
+    normalized_email, is_valid = validate_email(user_data.email)
+    if not is_valid:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Invalid email address"}
+        )
+    
+    # Check if email already exists
+    existing = await db.users.find_one({"email": normalized_email})
+    if existing:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Email already registered"}
+        )
+    
+    # Validate password
+    if len(user_data.password) < 8:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "Password must be at least 8 characters"}
+        )
+    
+    # Check if this is the first user (admin bootstrap)
+    user_count = await db.users.count_documents({})
+    role = "user"
+    
+    if user_count == 0:
+        # First user must use admin setup key to become admin
+        if not ADMIN_SETUP_KEY:
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "error": "ADMIN_SETUP_KEY not configured"}
+            )
+        
+        if user_data.setup_key != ADMIN_SETUP_KEY:
+            return JSONResponse(
+                status_code=403,
+                content={"ok": False, "error": "Invalid setup key for first admin registration"}
+            )
+        role = "admin"
+    else:
+        # Subsequent registrations require admin setup key too (controlled registration)
+        if user_data.setup_key != ADMIN_SETUP_KEY:
+            return JSONResponse(
+                status_code=403,
+                content={"ok": False, "error": "Registration requires a valid invite code"}
+            )
+        # Allow specifying role if valid key provided
+        if user_data.role in ["admin", "user"]:
+            role = user_data.role
+    
+    # Create user
+    now = datetime.now(timezone.utc)
+    user_doc = {
+        "id": str(uuid.uuid4()),
+        "email": normalized_email,
+        "password_hash": hash_password(user_data.password),
+        "role": role,
+        "created_at": now.isoformat(),
+        "last_login_at": None,
+        "is_active": True
+    }
+    
+    await db.users.insert_one(user_doc)
+    logger.info(f"User registered: {normalized_email} (role: {role})")
+    
+    return JSONResponse(
+        status_code=201,
+        content={
+            "ok": True,
+            "user": {
+                "id": user_doc["id"],
+                "email": user_doc["email"],
+                "role": user_doc["role"]
+            },
+            "message": f"User registered successfully as {role}"
+        }
+    )
+
+
+@api_router.post("/auth/login")
+async def login_user(user_data: UserLogin):
+    """Login user and set httpOnly cookie with JWT"""
+    
+    # Normalize email
+    normalized_email = user_data.email.strip().lower()
+    
+    # Find user
+    user = await db.users.find_one({"email": normalized_email})
+    
+    if not user:
+        return JSONResponse(
+            status_code=401,
+            content={"ok": False, "error": "Invalid email or password"}
+        )
+    
+    # Check if user is active
+    if not user.get("is_active", True):
+        return JSONResponse(
+            status_code=401,
+            content={"ok": False, "error": "Account is disabled"}
+        )
+    
+    # Verify password
+    if not verify_password(user_data.password, user.get("password_hash", "")):
+        return JSONResponse(
+            status_code=401,
+            content={"ok": False, "error": "Invalid email or password"}
+        )
+    
+    # Update last login
+    now = datetime.now(timezone.utc)
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"last_login_at": now.isoformat()}}
+    )
+    
+    # Create JWT token
+    token = create_jwt_token(user["id"], user["email"], user.get("role", "user"))
+    
+    logger.info(f"User logged in: {normalized_email}")
+    
+    # Create response with httpOnly cookie
+    response = JSONResponse(
+        content={
+            "ok": True,
+            "user": {
+                "id": user["id"],
+                "email": user["email"],
+                "role": user.get("role", "user")
+            },
+            "message": "Login successful"
+        }
+    )
+    
+    # Set httpOnly cookie
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax",
+        max_age=JWT_EXPIRY_HOURS * 3600,
+        path="/"
+    )
+    
+    return response
+
+
+@api_router.post("/auth/logout")
+async def logout_user():
+    """Logout user by clearing the auth cookie"""
+    response = JSONResponse(
+        content={"ok": True, "message": "Logged out successfully"}
+    )
+    
+    # Clear the cookie
+    response.delete_cookie(
+        key=AUTH_COOKIE_NAME,
+        path="/"
+    )
+    
+    return response
+
+
+@api_router.get("/auth/me")
+async def get_current_user_info(request: Request):
+    """Get current user info if authenticated"""
+    user = await get_current_user(request)
+    
+    if not user:
+        return JSONResponse(
+            status_code=401,
+            content={"ok": False, "error": "Not authenticated", "user": None}
+        )
+    
+    return JSONResponse(
+        content={
+            "ok": True,
+            "user": user
+        }
+    )
+
+
 # Debug endpoint - for development only
 @api_router.get("/dashboard/debug-sample")
 async def debug_sample(
