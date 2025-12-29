@@ -327,6 +327,25 @@ const SiteDetail = ({ site, onClose, onUpdate }) => {
           placeholder="leads@example.com, sales@example.com"
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
         />
+        <div className="mt-2">
+          <button
+            onClick={handleSendTestEmail}
+            disabled={sendingTestEmail || !emails.trim()}
+            className="px-3 py-1 text-sm bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {sendingTestEmail ? "Sending..." : "📧 Send Test Email"}
+          </button>
+        </div>
+        {testEmailStatus && (
+          <div className={`mt-2 p-2 rounded-md text-sm ${
+            testEmailStatus.type === "success" 
+              ? "bg-green-50 border border-green-200 text-green-700"
+              : "bg-red-50 border border-red-200 text-red-700"
+          }`}>
+            {testEmailStatus.type === "success" ? "✅ " : "❌ "}
+            {testEmailStatus.message}
+          </div>
+        )}
       </div>
       
       <div className="flex items-center gap-3">
