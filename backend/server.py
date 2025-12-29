@@ -763,6 +763,26 @@ class OTPVerify(BaseModel):
         populate_by_name = True
 
 
+# Auth Models
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    setup_key: Optional[str] = None  # Required for first admin registration
+    role: Optional[str] = "user"
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    role: str
+    created_at: str
+
+
 def generate_otp_code() -> str:
     """Generate a 6-digit OTP code"""
     return str(random.randint(100000, 999999))
