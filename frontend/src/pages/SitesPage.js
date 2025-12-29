@@ -1089,6 +1089,7 @@ const SitesPage = () => {
         isOpen={!!selectedSite}
         onClose={() => setSelectedSite(null)}
         title={selectedSite?.name || "Site Details"}
+        size="large"
       >
         {selectedSite && (
           <SiteDetail
