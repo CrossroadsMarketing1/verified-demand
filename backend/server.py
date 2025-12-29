@@ -1891,6 +1891,12 @@ async def get_dashboard_leads(
     if not key:
         return {"error": "public_key parameter is required", "leads": [], "total": 0}
     
+    # Check access for non-admin users
+    if _user.get("role") != "admin":
+        can_access = await user_can_access_site(_user, key)
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Access denied to this site's data")
+    
     # Parse dates - default to last 90 days for leads to capture more data
     end_date = parse_date(end) or datetime.now(timezone.utc)
     start_date = parse_date(start) or (end_date - timedelta(days=90))
