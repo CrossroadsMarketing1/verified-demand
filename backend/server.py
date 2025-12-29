@@ -2304,7 +2304,7 @@ async def get_lead_detail(
         try:
             from bson import ObjectId
             lead = await db.vehicle_leads.find_one({"_id": ObjectId(lead_id)})
-        except:
+        except Exception:
             pass
     
     if not lead:
@@ -2340,7 +2340,7 @@ async def update_lead_workflow(
         try:
             from bson import ObjectId
             lead = await db.vehicle_leads.find_one({"_id": ObjectId(lead_id)})
-        except:
+        except Exception:
             pass
     
     if not lead:
