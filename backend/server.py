@@ -2111,6 +2111,16 @@ async def create_indexes():
         await db.sites.create_index("domain")
         await db.sites.create_index("created_at")
         
+        # Indexes for otp_verifications collection
+        await db.otp_verifications.create_index([
+            ("phone", 1),
+            ("public_key", 1),
+            ("status", 1)
+        ])
+        await db.otp_verifications.create_index("created_at")
+        # Note: TTL index would need to be created manually with proper datetime field
+        # For now, we'll clean up expired records during queries
+        
         logger.info("MongoDB indexes created successfully")
     except Exception as e:
         logger.error(f"Error creating indexes: {e}")
