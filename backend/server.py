@@ -661,12 +661,25 @@ def normalize_phone_for_otp(phone: str) -> str:
     return re.sub(r'\D', '', phone)
 
 
-async def send_sms(to_phone: str, message: str) -> bool:
-    """Send SMS via Twilio"""
+async def send_sms(to_phone: str, message: str, otp_code: str = None) -> tuple[bool, str]:
+    """
+    Send SMS via Twilio or mock in development mode.
+    Returns (success, dev_code_or_none)
+    """
+    # Mock SMS mode when Twilio not configured
     if not is_sms_configured():
-        logger.warning("SMS not configured, cannot send OTP")
-        return False
+        if is_development_mode():
+            # Log OTP to console for development/testing
+            logger.info(f"📱 [MOCK SMS] To: {to_phone}")
+            logger.info(f"📱 [MOCK SMS] Message: {message}")
+            if otp_code:
+                logger.info(f"📱 [MOCK SMS] OTP Code: {otp_code}")
+            return True, otp_code  # Return the code for dev mode response
+        else:
+            logger.warning("SMS not configured and not in development mode")
+            return False, None
     
+    # Real Twilio SMS
     try:
         from twilio.rest import Client
         client = Client(SMS_CONFIG["twilio_account_sid"], SMS_CONFIG["twilio_auth_token"])
@@ -681,19 +694,19 @@ async def send_sms(to_phone: str, message: str) -> bool:
             else:
                 formatted_phone = '+' + formatted_phone
         
-        message = client.messages.create(
+        msg = client.messages.create(
             body=message,
             from_=SMS_CONFIG["twilio_from_number"],
             to=formatted_phone
         )
-        logger.info(f"SMS sent successfully to {to_phone}, SID: {message.sid}")
-        return True
+        logger.info(f"SMS sent successfully to {to_phone}, SID: {msg.sid}")
+        return True, None  # Don't expose code in production
     except ImportError:
         logger.error("Twilio library not installed. Run: pip install twilio")
-        return False
+        return False, None
     except Exception as e:
         logger.error(f"Failed to send SMS: {e}")
-        return False
+        return False, None
 
 
 @api_router.post("/public/otp/request")
