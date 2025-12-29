@@ -2880,6 +2880,124 @@ Powered by VerifiedDemand
         return {"success": False, "error": str(e)}
 
 
+# ============================================
+# Site User Assignment (Admin Only)
+# ============================================
+
+class SiteAssignUsersRequest(BaseModel):
+    """Request body for assigning users to a site"""
+    allowed_user_ids: List[str] = Field(default_factory=list)
+
+
+@api_router.patch("/dashboard/sites/{public_key}/assign-users")
+async def assign_users_to_site(
+    public_key: str,
+    assignment: SiteAssignUsersRequest,
+    request: Request,
+    _user: dict = Depends(require_admin)
+):
+    """
+    Assign users to a site (Admin only).
+    - Validates that all user IDs exist and are active
+    - Replaces the allowed_user_ids list
+    """
+    
+    # Find the site
+    site = await db.sites.find_one({"public_key": public_key})
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    
+    # Validate all user IDs
+    if assignment.allowed_user_ids:
+        # Check that all users exist and are active
+        valid_user_ids = []
+        invalid_user_ids = []
+        
+        for user_id in assignment.allowed_user_ids:
+            user = await db.users.find_one({"id": user_id})
+            if user and user.get("is_active", True):
+                valid_user_ids.append(user_id)
+            else:
+                invalid_user_ids.append(user_id)
+        
+        if invalid_user_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid or inactive user IDs: {', '.join(invalid_user_ids)}"
+            )
+        
+        allowed_user_ids = valid_user_ids
+    else:
+        allowed_user_ids = []
+    
+    # Update the site
+    await db.sites.update_one(
+        {"public_key": public_key},
+        {"$set": {
+            "allowed_user_ids": allowed_user_ids,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Fetch and return updated site
+    updated_site = await db.sites.find_one({"public_key": public_key})
+    logger.info(f"Updated site {public_key} assignments: {len(allowed_user_ids)} users")
+    
+    return {
+        "success": True,
+        "message": f"Assigned {len(allowed_user_ids)} user(s) to site",
+        "site": serialize_site(updated_site)
+    }
+
+
+@api_router.get("/dashboard/sites/{public_key}/assigned-users")
+async def get_site_assigned_users(
+    public_key: str,
+    request: Request,
+    _user: dict = Depends(require_admin)
+):
+    """
+    Get users assigned to a site with their details (Admin only).
+    """
+    
+    site = await db.sites.find_one({"public_key": public_key})
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    
+    allowed_user_ids = site.get("allowed_user_ids", [])
+    owner_user_id = site.get("owner_user_id")
+    
+    # Fetch user details for assigned users
+    assigned_users = []
+    if allowed_user_ids:
+        cursor = db.users.find({"id": {"$in": allowed_user_ids}})
+        users = await cursor.to_list(length=100)
+        for u in users:
+            assigned_users.append({
+                "id": u.get("id"),
+                "email": u.get("email"),
+                "role": u.get("role", "user"),
+                "is_active": u.get("is_active", True)
+            })
+    
+    # Fetch owner details
+    owner = None
+    if owner_user_id:
+        owner_doc = await db.users.find_one({"id": owner_user_id})
+        if owner_doc:
+            owner = {
+                "id": owner_doc.get("id"),
+                "email": owner_doc.get("email"),
+                "role": owner_doc.get("role", "user")
+            }
+    
+    return {
+        "assigned_users": assigned_users,
+        "owner": owner,
+        "total": len(assigned_users)
+    }
+
+
 # Helper to resolve site from either key format
 async def resolve_site_by_key(key: str) -> Optional[dict]:
     """Resolve a site from public_key or publicKey (compatibility)"""
