@@ -1807,6 +1807,12 @@ async def get_dashboard_summary(
     if not key:
         return {"error": "public_key parameter is required"}
     
+    # Check access for non-admin users
+    if _user.get("role") != "admin":
+        can_access = await user_can_access_site(_user, key)
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Access denied to this site's data")
+    
     # Parse dates, default to last 7 days
     end_date = parse_date(end) or datetime.now(timezone.utc)
     start_date = parse_date(start) or (end_date - timedelta(days=7))
