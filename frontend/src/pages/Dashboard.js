@@ -482,6 +482,9 @@ const Dashboard = () => {
   const [customEnd, setCustomEnd] = useState("");
   const [activeTab, setActiveTab] = useState("leads");
   
+  // Current user state
+  const [currentUser, setCurrentUser] = useState(null);
+  
   // Sites state
   const [sites, setSites] = useState([]);
   const [selectedSiteId, setSelectedSiteId] = useState("");
@@ -509,6 +512,21 @@ const Dashboard = () => {
   // Loading/error state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Fetch current user on mount
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await axios.get(`${API}/auth/me`);
+        if (response.data.ok) {
+          setCurrentUser(response.data.user);
+        }
+      } catch (e) {
+        console.error("Failed to fetch current user:", e);
+      }
+    };
+    fetchCurrentUser();
+  }, []);
   
   // Fetch sites on mount
   useEffect(() => {
