@@ -147,13 +147,29 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
   if (hideDomainMismatch) {
     displayLeads = displayLeads.filter(lead => lead.domain_status !== 'mismatch');
   }
+  if (showOnlyVerified) {
+    displayLeads = displayLeads.filter(lead => lead.is_verified === true);
+  }
   
   const hiddenCount = leads.length - displayLeads.length;
+  const verifiedCount = leads.filter(l => l.is_verified === true).length;
   
   return (
     <div>
       {/* Filter toggles */}
       <div className="mb-4 flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showOnlyVerified}
+            onChange={() => onToggleShowOnlyVerified(!showOnlyVerified)}
+            className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+          />
+          <span className="flex items-center gap-1">
+            Show only verified
+            <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">{verifiedCount}</span>
+          </span>
+        </label>
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input
             type="checkbox"
