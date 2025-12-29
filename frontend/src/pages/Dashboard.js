@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+// Configure axios to send cookies
+axios.defaults.withCredentials = true;
 
 // Date range options
 const DATE_RANGES = {
