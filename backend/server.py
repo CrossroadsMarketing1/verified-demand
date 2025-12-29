@@ -17,6 +17,7 @@ import asyncio
 import hashlib
 import random
 import json
+import string
 
 
 ROOT_DIR = Path(__file__).parent
