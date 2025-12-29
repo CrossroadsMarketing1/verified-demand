@@ -693,41 +693,44 @@ const SitesPage = () => {
             site={selectedSite}
             onClose={() => setSelectedSite(null)}
             onUpdate={handleUpdateSite}
+            isAdmin={isAdmin}
           />
         )}
       </Modal>
       
-      {/* Rotate Key Confirmation Modal */}
-      <Modal
-        isOpen={!!rotateConfirm}
-        onClose={() => setRotateConfirm(null)}
-        title="Rotate Public Key"
-      >
-        <div className="space-y-4">
-          <p className="text-gray-600">
-            Are you sure you want to rotate this site&apos;s public key? The old key will be preserved
-            in history, but new tracking requests should use the new key.
-          </p>
-          <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-yellow-800 text-sm">
-            ⚠️ You will need to update your embed snippet with the new key.
+      {/* Rotate Key Confirmation Modal - Only for admins */}
+      {isAdmin && (
+        <Modal
+          isOpen={!!rotateConfirm}
+          onClose={() => setRotateConfirm(null)}
+          title="Rotate Public Key"
+        >
+          <div className="space-y-4">
+            <p className="text-gray-600">
+              Are you sure you want to rotate this site&apos;s public key? The old key will be preserved
+              in history, but new tracking requests should use the new key.
+            </p>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-yellow-800 text-sm">
+              ⚠️ You will need to update your embed snippet with the new key.
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setRotateConfirm(null)}
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRotateKey(rotateConfirm)}
+                disabled={rotating}
+                className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50"
+              >
+                {rotating ? "Rotating..." : "Rotate Key"}
+              </button>
+            </div>
           </div>
-          <div className="flex gap-3 justify-end">
-            <button
-              onClick={() => setRotateConfirm(null)}
-              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => handleRotateKey(rotateConfirm)}
-              disabled={rotating}
-              className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50"
-            >
-              {rotating ? "Rotating..." : "Rotate Key"}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
     </div>
   );
 };
