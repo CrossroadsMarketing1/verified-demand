@@ -493,6 +493,7 @@ const Dashboard = () => {
   const [hideFlaggedLeads, setHideFlaggedLeads] = useState(false);
   const [hideDomainMismatch, setHideDomainMismatch] = useState(false);
   const [showOnlyVerified, setShowOnlyVerified] = useState(false);
+  const [showOnlyWithCode, setShowOnlyWithCode] = useState(false);
   
   // Pagination
   const [leadsSkip, setLeadsSkip] = useState(0);
