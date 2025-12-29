@@ -2051,6 +2051,355 @@ async def get_event_types(
 
 
 # ============================================
+# Dealer Dashboard v2 - Call Queue Endpoints
+# ============================================
+
+# Valid lead statuses for dealer workflow
+LEAD_STATUSES = ["new", "attempted", "contacted", "appt_set", "sold", "lost"]
+
+class LeadUpdate(BaseModel):
+    """Schema for updating lead workflow fields"""
+    status: Optional[str] = Field(None, description="Lead status")
+    note: Optional[str] = Field(None, description="Note to add")
+    next_action_at: Optional[str] = Field(None, description="Next follow-up datetime ISO")
+    last_contacted_at: Optional[str] = Field(None, description="Last contacted datetime ISO")
+
+
+def normalize_lead_for_queue(doc: dict) -> dict:
+    """Normalize lead document for dealer queue view"""
+    item = serialize_doc(doc)
+    # Core identifiers
+    item['id'] = item.get('id') or str(item.get('_id', ''))
+    item['public_key'] = item.get('publicKey') or item.get('public_key')
+    
+    # Timestamps
+    item['timestamp'] = item.get('server_timestamp') or item.get('timestamp') or item.get('created_at')
+    item['created_at'] = item['timestamp']
+    
+    # Contact info
+    item['name'] = item.get('name') or ''
+    item['email'] = item.get('email') or ''
+    item['phone'] = item.get('phone') or ''
+    
+    # Verification status
+    item['is_verified'] = item.get('is_verified', False)
+    item['verified_at'] = item.get('verified_at')
+    item['verification_method'] = item.get('verification_method')
+    
+    # Unlock/confirmation code
+    item['unlock_code'] = item.get('unlock_code') or ''
+    
+    # Vehicle info (simplified)
+    vehicle = item.get('vehicle') or {}
+    if isinstance(vehicle, dict):
+        parts = [str(vehicle.get(k, '')) for k in ['year', 'make', 'model', 'trim'] if vehicle.get(k)]
+        item['vehicle_summary'] = ' '.join(parts) if parts else ''
+        item['vehicle'] = vehicle
+    else:
+        item['vehicle_summary'] = ''
+        item['vehicle'] = {}
+    
+    # Domain/source info
+    item['source_url'] = item.get('url') or item.get('source_url') or item.get('page_url') or ''
+    item['source_domain'] = item.get('source_domain') or ''
+    item['domain_status'] = item.get('domain_status', 'unknown')
+    
+    # Workflow fields (with defaults)
+    item['status'] = item.get('status', 'new')
+    item['status_updated_at'] = item.get('status_updated_at')
+    item['notes'] = item.get('notes', [])
+    item['next_action_at'] = item.get('next_action_at')
+    item['last_contacted_at'] = item.get('last_contacted_at')
+    item['assigned_to_user_id'] = item.get('assigned_to_user_id')
+    item['updated_at'] = item.get('updated_at') or item['timestamp']
+    
+    # Flags
+    item['is_suspected_spam'] = item.get('is_suspected_spam', False)
+    item['is_invalid_contact'] = item.get('is_invalid_contact', False)
+    
+    return item
+
+
+@api_router.get("/dashboard/leads/queue")
+async def get_leads_queue(
+    request: Request,
+    public_key: Optional[str] = Query(None, alias="public_key", description="Site public key"),
+    publicKey: Optional[str] = Query(None, description="Site public key (alt)"),
+    verified_only: bool = Query(True, description="Only show verified leads"),
+    status: str = Query("new", description="Filter by status: new|attempted|contacted|appt_set|sold|lost|all"),
+    has_code_only: bool = Query(False, description="Only show leads with unlock code"),
+    hide_mismatch: bool = Query(True, description="Hide domain mismatch leads"),
+    q: Optional[str] = Query(None, description="Search name/email/phone/unlock_code"),
+    date_from: Optional[str] = Query(None, description="Start date ISO"),
+    date_to: Optional[str] = Query(None, description="End date ISO"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(50, ge=1, le=200, description="Items per page"),
+    _user: dict = Depends(require_auth)
+):
+    """
+    Get leads queue for dealer dashboard.
+    - RBAC enforced: admins see all, users see only assigned sites
+    - Optimized for dealer workflow
+    """
+    
+    # Accept either public_key or publicKey parameter
+    key = public_key or publicKey
+    if not key:
+        return {"error": "public_key parameter is required", "leads": [], "total": 0, "page": 1, "page_size": page_size}
+    
+    # Check access for non-admin users
+    if _user.get("role") != "admin":
+        can_access = await user_can_access_site(_user, key)
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Access denied to this site's data")
+    
+    # Build query
+    query_conditions = [build_public_key_filter(key)]
+    
+    # Verified filter
+    if verified_only:
+        query_conditions.append({"is_verified": True})
+    
+    # Status filter
+    if status and status != "all":
+        if status in LEAD_STATUSES:
+            query_conditions.append({"$or": [{"status": status}, {"status": {"$exists": False}}] if status == "new" else [{"status": status}]})
+    
+    # Has unlock code filter
+    if has_code_only:
+        query_conditions.append({"unlock_code": {"$exists": True, "$ne": "", "$ne": None}})
+    
+    # Hide domain mismatch
+    if hide_mismatch:
+        query_conditions.append({"$or": [{"domain_status": {"$ne": "mismatch"}}, {"domain_status": {"$exists": False}}]})
+    
+    # Date range filter
+    if date_from or date_to:
+        end_date = parse_date(date_to) or datetime.now(timezone.utc)
+        start_date = parse_date(date_from) or (end_date - timedelta(days=30))
+        query_conditions.append(build_timestamp_filter(start_date, end_date))
+    
+    # Search filter (name, email, phone, unlock_code)
+    if q:
+        search_regex = {"$regex": q, "$options": "i"}
+        query_conditions.append({
+            "$or": [
+                {"name": search_regex},
+                {"email": search_regex},
+                {"phone": search_regex},
+                {"unlock_code": search_regex}
+            ]
+        })
+    
+    # Combine all conditions
+    query = {"$and": query_conditions} if len(query_conditions) > 1 else query_conditions[0]
+    
+    # Get total count
+    total_count = await db.vehicle_leads.count_documents(query)
+    
+    # Calculate skip
+    skip = (page - 1) * page_size
+    
+    # Get leads sorted by newest first, with next_action leads prioritized
+    cursor = db.vehicle_leads.find(query).sort([
+        ("next_action_at", 1),  # Leads with follow-up dates first
+        ("server_timestamp", -1),
+        ("timestamp", -1),
+        ("_id", -1)
+    ]).skip(skip).limit(page_size)
+    
+    leads = await cursor.to_list(length=page_size)
+    
+    # Normalize leads for queue view
+    serialized_leads = [normalize_lead_for_queue(lead) for lead in leads]
+    
+    return {
+        "leads": serialized_leads,
+        "total": total_count,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total_count + page_size - 1) // page_size
+    }
+
+
+@api_router.get("/dashboard/leads/queue/stats")
+async def get_queue_stats(
+    request: Request,
+    public_key: Optional[str] = Query(None, alias="public_key", description="Site public key"),
+    publicKey: Optional[str] = Query(None, description="Site public key (alt)"),
+    _user: dict = Depends(require_auth)
+):
+    """
+    Get quick stats for dealer dashboard KPIs.
+    """
+    
+    key = public_key or publicKey
+    if not key:
+        return {"error": "public_key parameter is required"}
+    
+    # Check access
+    if _user.get("role") != "admin":
+        can_access = await user_can_access_site(_user, key)
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Access denied to this site's data")
+    
+    key_filter = build_public_key_filter(key)
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_ago = now - timedelta(days=7)
+    
+    # Build time filters
+    today_filter = build_timestamp_filter(today_start, now)
+    week_filter = build_timestamp_filter(week_ago, now)
+    
+    # Count new verified (today)
+    new_verified_today = await db.vehicle_leads.count_documents({
+        "$and": [key_filter, today_filter, {"is_verified": True}, {"$or": [{"status": "new"}, {"status": {"$exists": False}}]}]
+    })
+    
+    # Count contacted (today)
+    contacted_today = await db.vehicle_leads.count_documents({
+        "$and": [key_filter, {"status": "contacted"}, {"status_updated_at": {"$gte": today_start.isoformat()}}]
+    })
+    
+    # Count appointments set (7d)
+    appts_7d = await db.vehicle_leads.count_documents({
+        "$and": [key_filter, {"status": "appt_set"}, {"status_updated_at": {"$gte": week_ago.isoformat()}}]
+    })
+    
+    # Total verified (7d)
+    total_verified_7d = await db.vehicle_leads.count_documents({
+        "$and": [key_filter, week_filter, {"is_verified": True}]
+    })
+    
+    # Leads needing follow-up (next_action_at <= now)
+    needs_followup = await db.vehicle_leads.count_documents({
+        "$and": [key_filter, {"next_action_at": {"$lte": now.isoformat()}}, {"status": {"$nin": ["sold", "lost"]}}]
+    })
+    
+    return {
+        "new_verified_today": new_verified_today,
+        "contacted_today": contacted_today,
+        "appts_set_7d": appts_7d,
+        "total_verified_7d": total_verified_7d,
+        "needs_followup": needs_followup
+    }
+
+
+@api_router.get("/dashboard/leads/{lead_id}")
+async def get_lead_detail(
+    lead_id: str,
+    request: Request,
+    _user: dict = Depends(require_auth)
+):
+    """
+    Get full lead detail including notes history.
+    """
+    
+    # Find lead by id field (UUID string)
+    lead = await db.vehicle_leads.find_one({"id": lead_id})
+    
+    if not lead:
+        # Try by MongoDB _id
+        try:
+            from bson import ObjectId
+            lead = await db.vehicle_leads.find_one({"_id": ObjectId(lead_id)})
+        except:
+            pass
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check access
+    key = lead.get("publicKey") or lead.get("public_key")
+    if _user.get("role") != "admin":
+        can_access = await user_can_access_site(_user, key)
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Access denied to this lead")
+    
+    return normalize_lead_for_queue(lead)
+
+
+@api_router.patch("/dashboard/leads/{lead_id}")
+async def update_lead_workflow(
+    lead_id: str,
+    update: LeadUpdate,
+    request: Request,
+    _user: dict = Depends(require_auth)
+):
+    """
+    Update lead workflow fields: status, notes, next_action_at, last_contacted_at.
+    - Appends notes with user info and timestamp
+    - Enforces RBAC
+    """
+    
+    # Find lead
+    lead = await db.vehicle_leads.find_one({"id": lead_id})
+    
+    if not lead:
+        try:
+            from bson import ObjectId
+            lead = await db.vehicle_leads.find_one({"_id": ObjectId(lead_id)})
+        except:
+            pass
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check access
+    key = lead.get("publicKey") or lead.get("public_key")
+    if _user.get("role") != "admin":
+        can_access = await user_can_access_site(_user, key)
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Access denied to this lead")
+    
+    # Build update document
+    now = datetime.now(timezone.utc)
+    update_doc = {"updated_at": now.isoformat()}
+    
+    # Update status
+    if update.status:
+        if update.status not in LEAD_STATUSES:
+            raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {LEAD_STATUSES}")
+        update_doc["status"] = update.status
+        update_doc["status_updated_at"] = now.isoformat()
+    
+    # Add note
+    if update.note:
+        note_obj = {
+            "text": update.note,
+            "created_at": now.isoformat(),
+            "user_id": _user.get("id"),
+            "user_email": _user.get("email")
+        }
+        # Append to existing notes array (or create new)
+        existing_notes = lead.get("notes", [])
+        if not isinstance(existing_notes, list):
+            existing_notes = []
+        existing_notes.append(note_obj)
+        update_doc["notes"] = existing_notes
+    
+    # Update next_action_at
+    if update.next_action_at:
+        update_doc["next_action_at"] = update.next_action_at
+    
+    # Update last_contacted_at
+    if update.last_contacted_at:
+        update_doc["last_contacted_at"] = update.last_contacted_at
+    
+    # Perform update
+    lead_filter = {"id": lead_id} if lead.get("id") else {"_id": lead["_id"]}
+    result = await db.vehicle_leads.update_one(lead_filter, {"$set": update_doc})
+    
+    if result.modified_count == 0:
+        logger.warning(f"No document modified for lead {lead_id}")
+    
+    # Return updated lead
+    updated_lead = await db.vehicle_leads.find_one(lead_filter)
+    return normalize_lead_for_queue(updated_lead)
+
+
+# ============================================
 # Site Management API Endpoints
 # ============================================
 
