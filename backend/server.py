@@ -2714,6 +2714,13 @@ async def update_site(public_key: str, update: SiteUpdate, request: Request, _us
         update_doc["allowed_domains"] = [
             normalize_domain(d) for d in update.allowed_domains if d and d.strip()
         ]
+    # Webhook configuration updates
+    if update.verified_lead_webhook_url is not None:
+        update_doc["verified_lead_webhook_url"] = update.verified_lead_webhook_url if update.verified_lead_webhook_url else None
+    if update.webhook_secret is not None:
+        update_doc["webhook_secret"] = update.webhook_secret if update.webhook_secret else None
+    if update.webhook_enabled is not None:
+        update_doc["webhook_enabled"] = update.webhook_enabled
     
     await db.sites.update_one(
         {"public_key": public_key},
