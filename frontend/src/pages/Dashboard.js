@@ -228,6 +228,18 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input
             type="checkbox"
+            checked={showOnlyWithCode}
+            onChange={() => onToggleShowOnlyWithCode(!showOnlyWithCode)}
+            className="rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+          />
+          <span className="flex items-center gap-1">
+            Has code only
+            <span className="px-1.5 py-0.5 text-xs bg-sky-100 text-sky-700 rounded-full">{withCodeCount}</span>
+          </span>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <input
+            type="checkbox"
             checked={hideFlagged}
             onChange={() => onToggleHideFlagged(!hideFlagged)}
             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
