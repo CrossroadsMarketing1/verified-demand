@@ -710,12 +710,27 @@ const Dashboard = () => {
             <h1 className="text-2xl font-bold text-gray-900">VerifiedDemand Dashboard</h1>
             <p className="text-sm text-gray-500 mt-1">Analytics & Lead Tracking</p>
           </div>
-          <a
-            href="/dashboard/sites"
-            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
-          >
-            Sites / Install
-          </a>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/dashboard/sites"
+              className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
+            >
+              Sites / Install
+            </Link>
+            <button
+              onClick={async () => {
+                try {
+                  await axios.post(`${API}/auth/logout`);
+                  window.location.href = '/login';
+                } catch (e) {
+                  console.error('Logout error:', e);
+                }
+              }}
+              className="px-4 py-2 text-red-600 border border-red-200 rounded-md hover:bg-red-50"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </header>
       
