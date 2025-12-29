@@ -54,6 +54,12 @@ OTP_RESEND_COOLDOWN = 30  # seconds
 RATE_LIMIT_PER_PHONE = 3  # max OTP requests per phone per 10 minutes
 OTP_LOCKOUT_SECONDS = 900  # 15 minutes lockout after max attempts
 
+# Auth Configuration
+JWT_SECRET = os.environ.get("JWT_SECRET", "change_this_secret_in_production")
+JWT_EXPIRY_HOURS = int(os.environ.get("JWT_EXPIRY_HOURS", "24"))
+ADMIN_SETUP_KEY = os.environ.get("ADMIN_SETUP_KEY", "")
+AUTH_COOKIE_NAME = "vd_auth_token"
+
 def is_smtp_configured() -> bool:
     """Check if SMTP is properly configured"""
     return all([
