@@ -125,10 +125,12 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
     displayLeads = displayLeads.filter(lead => lead.domain_status !== 'mismatch');
   }
   
+  const hiddenCount = leads.length - displayLeads.length;
+  
   return (
     <div>
-      {/* Filter toggle */}
-      <div className="mb-4 flex items-center gap-2">
+      {/* Filter toggles */}
+      <div className="mb-4 flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input
             type="checkbox"
@@ -136,18 +138,27 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
             onChange={() => onToggleHideFlagged(!hideFlagged)}
             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
-          Hide flagged leads (spam/invalid)
+          Hide flagged (spam/invalid)
         </label>
-        {hideFlagged && leads.length !== displayLeads.length && (
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={hideDomainMismatch}
+            onChange={() => onToggleHideDomainMismatch(!hideDomainMismatch)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          Hide domain mismatches
+        </label>
+        {hiddenCount > 0 && (
           <span className="text-xs text-gray-500">
-            ({leads.length - displayLeads.length} hidden)
+            ({hiddenCount} hidden)
           </span>
         )}
       </div>
       
       {!displayLeads.length ? (
         <div className="text-center py-8 text-gray-500">
-          {hideFlagged && leads.length > 0 ? "All leads are flagged. Uncheck filter to view." : "No leads found"}
+          {leads.length > 0 ? "All leads are hidden by filters. Uncheck filters to view." : "No leads found"}
         </div>
       ) : (
         <>
@@ -155,23 +166,24 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date/Time</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Flags</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date/Time</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Domain</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Flags</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {displayLeads.map((lead, idx) => (
                   <tr 
                     key={lead._id || idx} 
-                    className={`hover:bg-gray-50 ${lead.is_suspected_spam ? 'bg-red-50' : lead.is_invalid_contact ? 'bg-yellow-50' : ''}`}
+                    className={`hover:bg-gray-50 ${lead.is_suspected_spam ? 'bg-red-50' : lead.is_invalid_contact ? 'bg-yellow-50' : lead.domain_status === 'mismatch' ? 'bg-orange-50' : ''}`}
                   >
-                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                    <td className="px-3 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {lead.created_at ? new Date(lead.created_at).toLocaleString() : "-"}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">{lead.name || "-"}</td>
