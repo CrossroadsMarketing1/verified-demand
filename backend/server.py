@@ -915,7 +915,6 @@ async def get_event_types(
 # ============================================
 
 import secrets
-import re
 
 # Site models
 class SiteCreate(BaseModel):
