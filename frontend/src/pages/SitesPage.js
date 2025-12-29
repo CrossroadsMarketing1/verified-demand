@@ -499,17 +499,30 @@ const SitesPage = () => {
             <p className="text-sm text-gray-500 mt-1">Manage your sites and get install snippets</p>
           </div>
           <div className="flex gap-3">
-            <a
-              href="/dashboard"
+            <Link
+              to="/dashboard"
               className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
             >
               Analytics
-            </a>
+            </Link>
             <button
               onClick={() => setShowCreateModal(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
               + Create Site
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  await axios.post(`${API}/auth/logout`);
+                  window.location.href = '/login';
+                } catch (e) {
+                  console.error('Logout error:', e);
+                }
+              }}
+              className="px-4 py-2 text-red-600 border border-red-200 rounded-md hover:bg-red-50"
+            >
+              Logout
             </button>
           </div>
         </div>
