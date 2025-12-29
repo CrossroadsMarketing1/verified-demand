@@ -1078,6 +1078,11 @@ async def create_site(site: SiteCreate):
     
     now = datetime.now(timezone.utc)
     
+    # Normalize allowed_domains
+    allowed_domains = []
+    if site.allowed_domains:
+        allowed_domains = [normalize_domain(d) for d in site.allowed_domains if d and d.strip()]
+    
     doc = {
         "site_id": f"site_{secrets.token_hex(8)}",
         "name": site.name,
@@ -1087,6 +1092,7 @@ async def create_site(site: SiteCreate):
         "updated_at": now.isoformat(),
         "is_active": True,
         "notification_emails": site.notification_emails or [],
+        "allowed_domains": allowed_domains,
         "previous_public_keys": []
     }
     
