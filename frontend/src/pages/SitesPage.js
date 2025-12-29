@@ -312,7 +312,7 @@ const SiteDetail = ({ site, onClose, onUpdate }) => {
       
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Domain
+          Primary Domain
         </label>
         <input
           type="text"
@@ -321,6 +321,22 @@ const SiteDetail = ({ site, onClose, onUpdate }) => {
           placeholder="maderaford.com"
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
         />
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Allowed Domains (one per line)
+        </label>
+        <textarea
+          value={allowedDomains}
+          onChange={(e) => setAllowedDomains(e.target.value)}
+          placeholder={"maderaford.com\nwww.maderaford.com\nstaging.maderaford.com"}
+          rows={3}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          If empty, the primary domain is used. Leads from unlisted domains will be flagged as &quot;mismatch&quot;.
+        </p>
       </div>
       
       <div>
