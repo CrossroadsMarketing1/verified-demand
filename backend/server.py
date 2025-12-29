@@ -1940,7 +1940,7 @@ def serialize_site(doc: dict) -> dict:
 
 
 @api_router.post("/dashboard/sites")
-async def create_site(site: SiteCreate):
+async def create_site(site: SiteCreate, request: Request, _user: dict = Depends(require_auth)):
     """Create a new site with auto-generated public key"""
     
     # Validate domain if provided
@@ -1987,7 +1987,7 @@ async def create_site(site: SiteCreate):
 
 
 @api_router.get("/dashboard/sites")
-async def list_sites():
+async def list_sites(request: Request, _user: dict = Depends(require_auth)):
     """List all sites, newest first"""
     cursor = db.sites.find({}).sort([("created_at", -1), ("_id", -1)])
     sites = await cursor.to_list(length=1000)
@@ -1995,7 +1995,7 @@ async def list_sites():
 
 
 @api_router.get("/dashboard/sites/{public_key}")
-async def get_site(public_key: str):
+async def get_site(public_key: str, request: Request, _user: dict = Depends(require_auth)):
     """Get a single site by public key"""
     # Check both current and previous keys
     site = await db.sites.find_one({
