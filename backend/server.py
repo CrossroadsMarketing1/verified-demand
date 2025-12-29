@@ -1469,12 +1469,13 @@ async def login_user(user_data: UserLogin):
         }
     )
     
-    # Set httpOnly cookie
+    # Set httpOnly cookie - secure=True in production
+    is_production = not is_development_mode()
     response.set_cookie(
         key=AUTH_COOKIE_NAME,
         value=token,
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
+        secure=is_production,  # True in production (HTTPS), False in development
         samesite="lax",
         max_age=JWT_EXPIRY_HOURS * 3600,
         path="/"
