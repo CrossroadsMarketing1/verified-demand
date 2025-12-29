@@ -2896,9 +2896,6 @@ async def resolve_site_by_key(key: str) -> Optional[dict]:
 # Webhook Delivery System
 # ============================================
 
-import httpx
-import hmac
-
 WEBHOOK_RETRY_DELAYS = [60, 300, 900]  # 1 min, 5 min, 15 min
 WEBHOOK_TIMEOUT = 30  # seconds
 
