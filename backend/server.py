@@ -120,6 +120,213 @@ CORS_HEADERS = {
 }
 
 
+# ============================================
+# Email Notification Functions
+# ============================================
+
+def format_vehicle_summary(vehicle: Optional[dict]) -> str:
+    """Format vehicle data into a readable summary"""
+    if not vehicle:
+        return "No vehicle data provided"
+    
+    # Try to build a summary from common fields
+    parts = []
+    if vehicle.get("year"):
+        parts.append(str(vehicle["year"]))
+    if vehicle.get("make"):
+        parts.append(str(vehicle["make"]))
+    if vehicle.get("model"):
+        parts.append(str(vehicle["model"]))
+    if vehicle.get("trim"):
+        parts.append(str(vehicle["trim"]))
+    
+    if parts:
+        return " ".join(parts)
+    
+    # Fallback: show first few key-value pairs
+    summary_parts = []
+    for key, value in list(vehicle.items())[:5]:
+        if value and key not in ["trackId", "elementTag", "elementText", "elementId"]:
+            summary_parts.append(f"{key}: {value}")
+    
+    return ", ".join(summary_parts) if summary_parts else "Vehicle data available"
+
+
+def build_lead_email_html(site: dict, lead: dict, timestamp: str) -> str:
+    """Build HTML email content for lead notification"""
+    vehicle_summary = format_vehicle_summary(lead.get("vehicle"))
+    source_url = lead.get("url") or lead.get("source_url") or "Not provided"
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: #2563eb; color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
+            .content {{ background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }}
+            .lead-info {{ background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }}
+            .label {{ font-weight: bold; color: #6b7280; font-size: 12px; text-transform: uppercase; }}
+            .value {{ font-size: 16px; margin-bottom: 12px; }}
+            .footer {{ text-align: center; padding: 15px; color: #9ca3af; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h2 style="margin: 0;">🎉 New Lead Received!</h2>
+                <p style="margin: 5px 0 0 0; opacity: 0.9;">{site.get('name', 'Unknown Site')}</p>
+            </div>
+            <div class="content">
+                <div class="lead-info">
+                    <div class="label">Contact Name</div>
+                    <div class="value">{lead.get('name', 'Not provided')}</div>
+                    
+                    <div class="label">Email</div>
+                    <div class="value"><a href="mailto:{lead.get('email', '')}">{lead.get('email', 'Not provided')}</a></div>
+                    
+                    <div class="label">Phone</div>
+                    <div class="value"><a href="tel:{lead.get('phone', '')}">{lead.get('phone', 'Not provided')}</a></div>
+                    
+                    <div class="label">Vehicle Interest</div>
+                    <div class="value">{vehicle_summary}</div>
+                    
+                    <div class="label">Source Page</div>
+                    <div class="value"><a href="{source_url}">{source_url}</a></div>
+                    
+                    <div class="label">Submitted At</div>
+                    <div class="value">{timestamp}</div>
+                </div>
+                
+                <p style="color: #6b7280; font-size: 14px;">
+                    <strong>Site:</strong> {site.get('name', 'Unknown')} 
+                    {f"({site.get('domain')})" if site.get('domain') else ""}
+                    <br>
+                    <strong>Public Key:</strong> <code>{lead.get('publicKey', 'Unknown')}</code>
+                </p>
+            </div>
+            <div class="footer">
+                Powered by VerifiedDemand
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+
+def build_lead_email_text(site: dict, lead: dict, timestamp: str) -> str:
+    """Build plain text email content for lead notification"""
+    vehicle_summary = format_vehicle_summary(lead.get("vehicle"))
+    source_url = lead.get("url") or lead.get("source_url") or "Not provided"
+    
+    text = f"""
+New Lead Received!
+==================
+
+Site: {site.get('name', 'Unknown Site')} {f"({site.get('domain')})" if site.get('domain') else ""}
+
+LEAD DETAILS
+------------
+Name: {lead.get('name', 'Not provided')}
+Email: {lead.get('email', 'Not provided')}
+Phone: {lead.get('phone', 'Not provided')}
+Vehicle: {vehicle_summary}
+Source URL: {source_url}
+Submitted: {timestamp}
+Public Key: {lead.get('publicKey', 'Unknown')}
+
+---
+Powered by VerifiedDemand
+"""
+    return text
+
+
+def send_email_sync(to_emails: List[str], subject: str, html_content: str, text_content: str) -> bool:
+    """Send email synchronously (to be run in thread pool)"""
+    if not is_smtp_configured():
+        logger.warning("SMTP not configured, skipping email send")
+        return False
+    
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = SMTP_CONFIG["from_email"]
+        msg["To"] = ", ".join(to_emails)
+        
+        # Attach both plain text and HTML versions
+        msg.attach(MIMEText(text_content, "plain"))
+        msg.attach(MIMEText(html_content, "html"))
+        
+        # Connect and send
+        with smtplib.SMTP(SMTP_CONFIG["host"], SMTP_CONFIG["port"]) as server:
+            server.starttls()
+            server.login(SMTP_CONFIG["user"], SMTP_CONFIG["password"])
+            server.sendmail(SMTP_CONFIG["from_email"], to_emails, msg.as_string())
+        
+        logger.info(f"Email sent successfully to {to_emails}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        return False
+
+
+async def send_email_async(to_emails: List[str], subject: str, html_content: str, text_content: str) -> bool:
+    """Send email asynchronously using thread pool"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, send_email_sync, to_emails, subject, html_content, text_content)
+
+
+async def resolve_site_by_public_key(public_key: str) -> Optional[dict]:
+    """Resolve a site by current or previous public key"""
+    site = await db.sites.find_one({
+        "$or": [
+            {"public_key": public_key},
+            {"previous_public_keys": public_key}
+        ]
+    })
+    return site
+
+
+async def send_lead_notification(lead: dict):
+    """Send lead notification emails to site owners"""
+    public_key = lead.get("publicKey")
+    if not public_key:
+        logger.warning("Lead missing publicKey, skipping notification")
+        return
+    
+    # Resolve the site
+    site = await resolve_site_by_public_key(public_key)
+    if not site:
+        logger.info(f"No site found for key {public_key}, skipping notification")
+        return
+    
+    # Check if site is active and has notification emails
+    if not site.get("is_active", True):
+        logger.info(f"Site {site.get('name')} is inactive, skipping notification")
+        return
+    
+    notification_emails = site.get("notification_emails", [])
+    if not notification_emails:
+        logger.info(f"Site {site.get('name')} has no notification emails configured")
+        return
+    
+    # Build and send email
+    timestamp = lead.get("server_timestamp") or datetime.now(timezone.utc).isoformat()
+    subject = f"🎉 New Lead: {lead.get('name', 'Unknown')} - {site.get('name', 'VerifiedDemand')}"
+    
+    html_content = build_lead_email_html(site, lead, timestamp)
+    text_content = build_lead_email_text(site, lead, timestamp)
+    
+    success = await send_email_async(notification_emails, subject, html_content, text_content)
+    if success:
+        logger.info(f"Lead notification sent for {lead.get('email')} to {notification_emails}")
+    else:
+        logger.warning(f"Failed to send lead notification for {lead.get('email')}")
+
+
 @api_router.post("/track")
 async def track_event(event: TrackEvent):
     """Receive tracking events from embed.js"""
