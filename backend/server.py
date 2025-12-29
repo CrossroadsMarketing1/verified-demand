@@ -1443,8 +1443,18 @@ async def register_user(user_data: UserRegister):
 
 
 @api_router.post("/auth/login")
-async def login_user(user_data: UserLogin):
+async def login_user(user_data: UserLogin, request: Request):
     """Login user and set httpOnly cookie with JWT"""
+    
+    # Rate limiting on login attempts
+    client_ip = get_client_ip(request)
+    rate_key = f"auth_login:{client_ip}"
+    if not check_rate_limit(rate_key, AUTH_RATE_LIMIT_LOGIN):
+        logger.warning(f"Login rate limit exceeded for IP: {client_ip}")
+        return JSONResponse(
+            status_code=429,
+            content={"ok": False, "error": "Too many login attempts. Please try again later."}
+        )
     
     # Normalize email
     normalized_email = user_data.email.strip().lower()
@@ -1460,9 +1470,10 @@ async def login_user(user_data: UserLogin):
     
     # Check if user is active
     if not user.get("is_active", True):
+        logger.warning(f"Login attempt for disabled account: {normalized_email}")
         return JSONResponse(
             status_code=401,
-            content={"ok": False, "error": "Account is disabled"}
+            content={"ok": False, "error": "Account is disabled. Please contact an administrator."}
         )
     
     # Verify password
