@@ -792,6 +792,8 @@ const Dashboard = () => {
                     onPageChange={(newSkip) => fetchLeads(newSkip)}
                     hideFlagged={hideFlaggedLeads}
                     onToggleHideFlagged={setHideFlaggedLeads}
+                    hideDomainMismatch={hideDomainMismatch}
+                    onToggleHideDomainMismatch={setHideDomainMismatch}
                   />
                 )}
                 {activeTab === "events" && (
