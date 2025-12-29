@@ -1256,6 +1256,10 @@ async def verify_otp(otp_verify: OTPVerify, request: Request, background_tasks: 
     if domain_status != 'mismatch':
         background_tasks.add_task(send_lead_notification, lead_doc)
     
+    # Trigger webhook for verified leads with verified domain status
+    # This runs in background so response remains fast
+    background_tasks.add_task(trigger_verified_lead_webhook, lead_doc, otp_verify.public_key)
+    
     return Response(
         content=json.dumps({
             "ok": True,
