@@ -2167,7 +2167,7 @@ async def get_leads_queue(
     
     # Has unlock code filter
     if has_code_only:
-        query_conditions.append({"unlock_code": {"$exists": True, "$ne": "", "$ne": None}})
+        query_conditions.append({"unlock_code": {"$exists": True, "$nin": ["", None]}})
     
     # Hide domain mismatch
     if hide_mismatch:
