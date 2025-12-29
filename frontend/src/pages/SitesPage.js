@@ -173,6 +173,29 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
   const [testEmailStatus, setTestEmailStatus] = useState(null);
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   
+  // Webhook state
+  const [webhookUrl, setWebhookUrl] = useState(site.verified_lead_webhook_url || "");
+  const [webhookSecret, setWebhookSecret] = useState(site.webhook_secret || "");
+  const [webhookEnabled, setWebhookEnabled] = useState(site.webhook_enabled !== false);
+  const [testWebhookStatus, setTestWebhookStatus] = useState(null);
+  const [sendingTestWebhook, setSendingTestWebhook] = useState(false);
+  const [webhookLogs, setWebhookLogs] = useState([]);
+  const [showWebhookLogs, setShowWebhookLogs] = useState(false);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  
+  // Fetch webhook logs
+  const fetchWebhookLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const response = await axios.get(`${API}/dashboard/sites/${site.public_key}/webhook-logs?limit=20`);
+      setWebhookLogs(response.data.logs || []);
+    } catch (err) {
+      console.error("Failed to fetch webhook logs:", err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+  
   const handleSendTestEmail = async () => {
     setSendingTestEmail(true);
     setTestEmailStatus(null);
@@ -198,6 +221,42 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
     }
   };
   
+  const handleSendTestWebhook = async () => {
+    setSendingTestWebhook(true);
+    setTestWebhookStatus(null);
+    
+    try {
+      const response = await axios.post(`${API}/dashboard/sites/${site.public_key}/send-test-webhook`);
+      if (response.data.success) {
+        setTestWebhookStatus({ 
+          type: "success", 
+          message: `Test webhook sent! HTTP ${response.data.http_status}` 
+        });
+        // Refresh logs
+        if (showWebhookLogs) {
+          fetchWebhookLogs();
+        }
+      } else {
+        setTestWebhookStatus({ 
+          type: "error", 
+          message: response.data.error || "Webhook delivery failed",
+          details: response.data.response
+        });
+      }
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setTestWebhookStatus({ type: "error", message: "Admin access required" });
+      } else {
+        setTestWebhookStatus({ 
+          type: "error", 
+          message: err.response?.data?.error || "Failed to send test webhook" 
+        });
+      }
+    } finally {
+      setSendingTestWebhook(false);
+    }
+  };
+  
   const handleSave = async () => {
     setLoading(true);
     setError(null);
@@ -218,7 +277,10 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
         domain: domain || null,
         is_active: isActive,
         notification_emails: emailList,
-        allowed_domains: domainList
+        allowed_domains: domainList,
+        verified_lead_webhook_url: webhookUrl || null,
+        webhook_secret: webhookSecret || null,
+        webhook_enabled: webhookEnabled
       });
       
       if (response.data.error) {
