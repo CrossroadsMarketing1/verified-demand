@@ -231,6 +231,32 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """
+    Validate password strength.
+    Returns (is_valid, error_message)
+    """
+    if len(password) < AUTH_MIN_PASSWORD_LENGTH:
+        return False, f"Password must be at least {AUTH_MIN_PASSWORD_LENGTH} characters"
+    
+    # Check for at least one uppercase, one lowercase, one digit
+    has_upper = any(c.isupper() for c in password)
+    has_lower = any(c.islower() for c in password)
+    has_digit = any(c.isdigit() for c in password)
+    
+    if not (has_upper and has_lower and has_digit):
+        return False, "Password must contain at least one uppercase letter, one lowercase letter, and one number"
+    
+    return True, ""
+
+
+def generate_temp_password() -> str:
+    """Generate a temporary password for admin-created users"""
+    # Generate a readable password: 2 words + 2 digits + symbol
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choices(chars, k=12)) + random.choice("!@#$%")
+
+
 def create_jwt_token(user_id: str, email: str, role: str) -> str:
     """Create JWT token for user"""
     payload = {
