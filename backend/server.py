@@ -14,6 +14,8 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import asyncio
+import hashlib
+import random
 
 
 ROOT_DIR = Path(__file__).parent
@@ -33,6 +35,20 @@ SMTP_CONFIG = {
     "from_email": os.environ.get("SMTP_FROM")
 }
 
+# SMS/Twilio Configuration
+SMS_CONFIG = {
+    "provider": os.environ.get("SMS_PROVIDER", "twilio"),
+    "twilio_account_sid": os.environ.get("TWILIO_ACCOUNT_SID"),
+    "twilio_auth_token": os.environ.get("TWILIO_AUTH_TOKEN"),
+    "twilio_from_number": os.environ.get("TWILIO_FROM_NUMBER")
+}
+
+# OTP Configuration
+OTP_EXPIRY_SECONDS = 600  # 10 minutes
+OTP_MAX_ATTEMPTS = 5
+OTP_RESEND_COOLDOWN = 30  # seconds
+RATE_LIMIT_PER_PHONE = 3  # max OTP requests per phone per 10 minutes
+
 def is_smtp_configured() -> bool:
     """Check if SMTP is properly configured"""
     return all([
@@ -40,6 +56,15 @@ def is_smtp_configured() -> bool:
         SMTP_CONFIG["user"],
         SMTP_CONFIG["password"],
         SMTP_CONFIG["from_email"]
+    ])
+
+
+def is_sms_configured() -> bool:
+    """Check if SMS (Twilio) is properly configured"""
+    return all([
+        SMS_CONFIG["twilio_account_sid"],
+        SMS_CONFIG["twilio_auth_token"],
+        SMS_CONFIG["twilio_from_number"]
     ])
 
 # Create the main app without a prefix
