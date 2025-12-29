@@ -341,6 +341,9 @@ const Dashboard = () => {
   const [eventTypes, setEventTypes] = useState([]);
   const [selectedEventType, setSelectedEventType] = useState("");
   
+  // Filter state
+  const [hideFlaggedLeads, setHideFlaggedLeads] = useState(false);
+  
   // Pagination
   const [leadsSkip, setLeadsSkip] = useState(0);
   const [leadsTotal, setLeadsTotal] = useState(0);
