@@ -316,7 +316,7 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
       
       <hr className="my-4" />
       
-      {/* Editable Fields */}
+      {/* Editable Fields - Read-only for non-admins */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Site Name
@@ -325,7 +325,8 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          disabled={!isAdmin}
+          className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 ${!isAdmin ? 'bg-gray-100 cursor-not-allowed' : ''}`}
         />
       </div>
       
@@ -338,7 +339,8 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
           placeholder="maderaford.com"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          disabled={!isAdmin}
+          className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 ${!isAdmin ? 'bg-gray-100 cursor-not-allowed' : ''}`}
         />
       </div>
       
@@ -351,7 +353,8 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
           onChange={(e) => setAllowedDomains(e.target.value)}
           placeholder={"maderaford.com\nwww.maderaford.com\nstaging.maderaford.com"}
           rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+          disabled={!isAdmin}
+          className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 font-mono text-sm ${!isAdmin ? 'bg-gray-100 cursor-not-allowed' : ''}`}
         />
         <p className="text-xs text-gray-500 mt-1">
           If empty, the primary domain is used. Leads from unlisted domains will be flagged as &quot;mismatch&quot;.
@@ -367,17 +370,21 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
           value={emails}
           onChange={(e) => setEmails(e.target.value)}
           placeholder="leads@example.com, sales@example.com"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+          disabled={!isAdmin}
+          className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 ${!isAdmin ? 'bg-gray-100 cursor-not-allowed' : ''}`}
         />
-        <div className="mt-2">
-          <button
-            onClick={handleSendTestEmail}
-            disabled={sendingTestEmail || !emails.trim()}
-            className="px-3 py-1 text-sm bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {sendingTestEmail ? "Sending..." : "📧 Send Test Email"}
-          </button>
-        </div>
+        {/* Only show test email button for admins */}
+        {isAdmin && (
+          <div className="mt-2">
+            <button
+              onClick={handleSendTestEmail}
+              disabled={sendingTestEmail || !emails.trim()}
+              className="px-3 py-1 text-sm bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {sendingTestEmail ? "Sending..." : "📧 Send Test Email"}
+            </button>
+          </div>
+        )}
         {testEmailStatus && (
           <div className={`mt-2 p-2 rounded-md text-sm ${
             testEmailStatus.type === "success" 
@@ -392,16 +399,26 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
       
       <div className="flex items-center gap-3">
         <label className="text-sm font-medium text-gray-700">Status:</label>
-        <button
-          onClick={() => setIsActive(!isActive)}
-          className={`px-3 py-1 rounded-full text-sm font-medium ${
+        {isAdmin ? (
+          <button
+            onClick={() => setIsActive(!isActive)}
+            className={`px-3 py-1 rounded-full text-sm font-medium ${
+              isActive
+                ? "bg-green-100 text-green-800"
+                : "bg-red-100 text-red-800"
+            }`}
+          >
+            {isActive ? "Active" : "Inactive"}
+          </button>
+        ) : (
+          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
             isActive
               ? "bg-green-100 text-green-800"
               : "bg-red-100 text-red-800"
-          }`}
-        >
-          {isActive ? "Active" : "Inactive"}
-        </button>
+          }`}>
+            {isActive ? "Active" : "Inactive"}
+          </span>
+        )}
       </div>
       
       {error && (
@@ -417,13 +434,17 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
         >
           Close
         </button>
-        <button
-          onClick={handleSave}
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? "Saving..." : "Save Changes"}
-        </button>
+        {/* Only show Save button for admins */}
+        {isAdmin && (
+          <button
+            onClick={handleSave}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            data-testid="save-site-btn"
+          >
+            {loading ? "Saving..." : "Save Changes"}
+          </button>
+        )}
       </div>
     </div>
   );
