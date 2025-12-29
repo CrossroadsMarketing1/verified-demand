@@ -1037,6 +1037,9 @@ async def verify_otp(otp_verify: OTPVerify, request: Request, background_tasks: 
         {"$set": {"status": "verified", "verified_at": now.isoformat()}}
     )
     
+    # Generate unique unlock/confirmation code
+    unlock_code = await get_unique_unlock_code()
+    
     # Create the lead from draft
     lead_draft = otp_record.get("lead_draft", {})
     
@@ -1058,6 +1061,8 @@ async def verify_otp(otp_verify: OTPVerify, request: Request, background_tasks: 
         "verified_at": now.isoformat(),
         "verification_method": "sms_otp",
         "otp_verification_id": otp_record["id"],
+        "unlock_code": unlock_code,
+        "unlock_code_created_at": now.isoformat(),
         "is_suspected_spam": False,
         "is_invalid_contact": not email_valid if email else False,
         "email_valid": email_valid if email else None,
@@ -1069,7 +1074,7 @@ async def verify_otp(otp_verify: OTPVerify, request: Request, background_tasks: 
     }
     
     await db.vehicle_leads.insert_one(lead_doc)
-    logger.info(f"Verified lead created: {normalized_email or lead_doc['phone']} for key: {otp_verify.public_key}")
+    logger.info(f"Verified lead created: {normalized_email or lead_doc['phone']} for key: {otp_verify.public_key}, unlock_code: {unlock_code}")
     
     # Send dealer notification (only if domain is verified or unknown, not mismatch)
     domain_status = otp_record.get("domain_status", "unknown")
@@ -1077,7 +1082,13 @@ async def verify_otp(otp_verify: OTPVerify, request: Request, background_tasks: 
         background_tasks.add_task(send_lead_notification, lead_doc)
     
     return Response(
-        content=f'{{"ok":true,"verified":true,"lead_id":"{lead_doc["id"]}","message":"Phone verified successfully!"}}',
+        content=json.dumps({
+            "ok": True,
+            "verified": True,
+            "lead_id": lead_doc["id"],
+            "unlock_code": unlock_code,
+            "message": "Phone verified successfully!"
+        }),
         media_type="application/json",
         headers=CORS_HEADERS
     )
