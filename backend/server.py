@@ -663,52 +663,66 @@ def normalize_phone_for_otp(phone: str) -> str:
     return re.sub(r'\D', '', phone)
 
 
-async def send_sms(to_phone: str, message: str, otp_code: str = None) -> tuple[bool, str]:
+async def send_sms(to_phone: str, message: str, otp_code: str = None) -> tuple[bool, str, str]:
     """
     Send SMS via Twilio or mock in development mode.
-    Returns (success, dev_code_or_none)
-    """
-    # Mock SMS mode when Twilio not configured
-    if not is_sms_configured():
-        if is_development_mode():
-            # Log OTP to console for development/testing
-            logger.info(f"📱 [MOCK SMS] To: {to_phone}")
-            logger.info(f"📱 [MOCK SMS] Message: {message}")
-            if otp_code:
-                logger.info(f"📱 [MOCK SMS] OTP Code: {otp_code}")
-            return True, otp_code  # Return the code for dev mode response
-        else:
-            logger.warning("SMS not configured and not in development mode")
-            return False, None
+    Returns (success, dev_code_or_none, error_message_or_none)
     
-    # Real Twilio SMS
-    try:
-        from twilio.rest import Client
-        client = Client(SMS_CONFIG["twilio_account_sid"], SMS_CONFIG["twilio_auth_token"])
-        
-        # Format phone number (ensure it starts with +1 for US)
-        formatted_phone = to_phone
-        if not formatted_phone.startswith('+'):
-            if len(formatted_phone) == 10:
-                formatted_phone = '+1' + formatted_phone
-            elif len(formatted_phone) == 11 and formatted_phone.startswith('1'):
-                formatted_phone = '+' + formatted_phone
+    Behavior:
+    - If Twilio configured → send real SMS, never return dev_code
+    - If Twilio NOT configured:
+      - ENV=development → mock SMS (log code), return dev_code
+      - ENV=production → return error, do NOT send
+    """
+    # Check if Twilio is configured
+    if is_sms_configured():
+        # Real Twilio SMS - NEVER expose dev_code
+        try:
+            from twilio.rest import Client
+            client = Client(SMS_CONFIG["twilio_account_sid"], SMS_CONFIG["twilio_auth_token"])
+            
+            # Format phone number (ensure it starts with +1 for US)
+            formatted_phone = to_phone
+            if not formatted_phone.startswith('+'):
+                if len(formatted_phone) == 10:
+                    formatted_phone = '+1' + formatted_phone
+                elif len(formatted_phone) == 11 and formatted_phone.startswith('1'):
+                    formatted_phone = '+' + formatted_phone
+                else:
+                    formatted_phone = '+' + formatted_phone
+            
+            msg = client.messages.create(
+                body=message,
+                from_=SMS_CONFIG["twilio_from_number"],
+                to=formatted_phone
+            )
+            logger.info(f"✅ SMS sent successfully to {formatted_phone}, Twilio SID: {msg.sid}")
+            return True, None, None  # Success, no dev_code in production
+            
+        except ImportError:
+            logger.error("❌ Twilio library not installed. Run: pip install twilio")
+            return False, None, "SMS service configuration error"
+        except Exception as e:
+            # Log Twilio error details (without secrets)
+            error_msg = str(e)
+            if hasattr(e, 'code'):
+                logger.error(f"❌ Twilio API error - Code: {e.code}, Message: {error_msg}")
             else:
-                formatted_phone = '+' + formatted_phone
-        
-        msg = client.messages.create(
-            body=message,
-            from_=SMS_CONFIG["twilio_from_number"],
-            to=formatted_phone
-        )
-        logger.info(f"SMS sent successfully to {to_phone}, SID: {msg.sid}")
-        return True, None  # Don't expose code in production
-    except ImportError:
-        logger.error("Twilio library not installed. Run: pip install twilio")
-        return False, None
-    except Exception as e:
-        logger.error(f"Failed to send SMS: {e}")
-        return False, None
+                logger.error(f"❌ Twilio send failed: {error_msg}")
+            return False, None, "Failed to send SMS. Please try again."
+    
+    # Twilio NOT configured
+    if is_development_mode():
+        # Mock SMS mode - only in development
+        logger.info(f"📱 [MOCK SMS - DEV MODE] To: {to_phone}")
+        logger.info(f"📱 [MOCK SMS - DEV MODE] Message: {message}")
+        if otp_code:
+            logger.info(f"📱 [MOCK SMS - DEV MODE] OTP Code: {otp_code}")
+        return True, otp_code, None  # Return dev_code ONLY in dev mode
+    else:
+        # Production without Twilio - fail gracefully
+        logger.error("❌ SMS not configured in production mode - cannot send OTP")
+        return False, None, "SMS temporarily unavailable. Please try again later."
 
 
 @api_router.post("/public/otp/request")
