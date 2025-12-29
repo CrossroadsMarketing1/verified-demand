@@ -261,6 +261,7 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Verified</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Domain</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -290,6 +291,9 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
                     </td>
                     <td className="px-3 py-3 text-sm">
                       <VerifiedBadge lead={lead} />
+                    </td>
+                    <td className="px-3 py-3 text-sm">
+                      <UnlockCodeCell code={lead.unlock_code} />
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900">
                       <span title={JSON.stringify(lead.vehicle, null, 2)}>
