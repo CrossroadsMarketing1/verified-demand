@@ -857,7 +857,6 @@ async def request_otp(otp_req: OTPRequest, request: Request):
         response_data["dev_code"] = dev_code
         response_data["message"] = f"[DEV MODE] Code: {dev_code} - Also logged to server console."
     
-    import json
     return Response(
         content=json.dumps(response_data),
         media_type="application/json",
