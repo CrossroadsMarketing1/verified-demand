@@ -874,9 +874,6 @@ async def otp_request_options():
 async def verify_otp(otp_verify: OTPVerify, request: Request, background_tasks: BackgroundTasks):
     """Verify OTP code and create lead"""
     
-    # Get client info
-    client_ip = get_client_ip(request)
-    
     # Normalize phone
     normalized_phone = normalize_phone_for_otp(otp_verify.phone)
     
