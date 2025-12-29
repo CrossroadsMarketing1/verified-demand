@@ -87,16 +87,43 @@ const LeadFlags = ({ lead }) => {
   return <div className="flex flex-col gap-1">{flags}</div>;
 };
 
+// Domain status badge component
+const DomainStatusBadge = ({ status, domain }) => {
+  if (status === 'verified') {
+    return (
+      <span className="px-1.5 py-0.5 text-xs rounded bg-green-100 text-green-700" title={`Domain: ${domain || 'N/A'}`}>
+        ✓ Verified
+      </span>
+    );
+  }
+  if (status === 'mismatch') {
+    return (
+      <span className="px-1.5 py-0.5 text-xs rounded bg-orange-100 text-orange-700" title={`Domain: ${domain || 'N/A'}`}>
+        ⚠ Mismatch
+      </span>
+    );
+  }
+  return (
+    <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600" title={`Domain: ${domain || 'N/A'}`}>
+      ? Unknown
+    </span>
+  );
+};
+
 // Leads Table Component
-const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlagged, onToggleHideFlagged }) => {
+const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlagged, onToggleHideFlagged, hideDomainMismatch, onToggleHideDomainMismatch }) => {
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Loading leads...</div>;
   }
   
-  // Filter leads if hideFlagged is enabled
-  const displayLeads = hideFlagged 
-    ? leads.filter(lead => !lead.is_suspected_spam && !lead.is_invalid_contact)
-    : leads;
+  // Filter leads based on toggle states
+  let displayLeads = leads;
+  if (hideFlagged) {
+    displayLeads = displayLeads.filter(lead => !lead.is_suspected_spam && !lead.is_invalid_contact);
+  }
+  if (hideDomainMismatch) {
+    displayLeads = displayLeads.filter(lead => lead.domain_status !== 'mismatch');
+  }
   
   return (
     <div>
