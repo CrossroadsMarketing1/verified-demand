@@ -165,6 +165,29 @@ const SiteDetail = ({ site, onClose, onUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(null);
+  const [testEmailStatus, setTestEmailStatus] = useState(null);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  
+  const handleSendTestEmail = async () => {
+    setSendingTestEmail(true);
+    setTestEmailStatus(null);
+    
+    try {
+      const response = await axios.post(`${API}/dashboard/sites/${site.public_key}/send-test-email`);
+      if (response.data.success) {
+        setTestEmailStatus({ type: "success", message: response.data.message });
+      } else {
+        setTestEmailStatus({ type: "error", message: response.data.error });
+      }
+    } catch (err) {
+      setTestEmailStatus({ 
+        type: "error", 
+        message: err.response?.data?.error || "Failed to send test email" 
+      });
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
   
   const handleSave = async () => {
     setLoading(true);
