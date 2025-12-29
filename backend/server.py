@@ -2246,7 +2246,9 @@ async def create_site(site: SiteCreate, request: Request, _user: dict = Depends(
         "is_active": True,
         "notification_emails": site.notification_emails or [],
         "allowed_domains": allowed_domains,
-        "previous_public_keys": []
+        "previous_public_keys": [],
+        "owner_user_id": _user["id"],  # Site ownership for RBAC
+        "allowed_user_ids": []  # Additional users with access (optional)
     }
     
     await db.sites.insert_one(doc)
