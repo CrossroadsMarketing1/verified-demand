@@ -183,6 +183,71 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
   const [showWebhookLogs, setShowWebhookLogs] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
   
+  // User assignment state
+  const [allUsers, setAllUsers] = useState([]);
+  const [assignedUserIds, setAssignedUserIds] = useState(site.allowed_user_ids || []);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [savingAssignments, setSavingAssignments] = useState(false);
+  const [assignmentStatus, setAssignmentStatus] = useState(null);
+  
+  // Fetch all users (admin only)
+  useEffect(() => {
+    if (isAdmin) {
+      const fetchUsers = async () => {
+        setLoadingUsers(true);
+        try {
+          const response = await axios.get(`${API}/dashboard/users`);
+          // Filter to only show non-admin active users
+          const users = (response.data.users || []).filter(u => u.role !== 'admin' && u.is_active);
+          setAllUsers(users);
+        } catch (err) {
+          console.error("Failed to fetch users:", err);
+        } finally {
+          setLoadingUsers(false);
+        }
+      };
+      fetchUsers();
+    }
+  }, [isAdmin]);
+  
+  // Handle user assignment toggle
+  const toggleUserAssignment = (userId) => {
+    if (assignedUserIds.includes(userId)) {
+      setAssignedUserIds(assignedUserIds.filter(id => id !== userId));
+    } else {
+      setAssignedUserIds([...assignedUserIds, userId]);
+    }
+  };
+  
+  // Save user assignments
+  const handleSaveAssignments = async () => {
+    setSavingAssignments(true);
+    setAssignmentStatus(null);
+    
+    try {
+      const response = await axios.patch(`${API}/dashboard/sites/${site.public_key}/assign-users`, {
+        allowed_user_ids: assignedUserIds
+      });
+      
+      if (response.data.success) {
+        setAssignmentStatus({ type: "success", message: response.data.message });
+        // Update parent with new site data
+        if (response.data.site) {
+          onUpdate(response.data.site);
+        }
+      } else {
+        setAssignmentStatus({ type: "error", message: response.data.error || "Failed to save assignments" });
+      }
+    } catch (err) {
+      setAssignmentStatus({ 
+        type: "error", 
+        message: err.response?.data?.detail || "Failed to save assignments" 
+      });
+    } finally {
+      setSavingAssignments(false);
+    }
+  };
+  
   // Fetch webhook logs
   const fetchWebhookLogs = async () => {
     setLoadingLogs(true);
