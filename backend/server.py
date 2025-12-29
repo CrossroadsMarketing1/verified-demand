@@ -1637,12 +1637,14 @@ async def get_dashboard_summary(
 
 @api_router.get("/dashboard/leads")
 async def get_dashboard_leads(
+    request: Request,
     public_key: Optional[str] = Query(None, alias="public_key", description="Public key to filter by"),
     publicKey: Optional[str] = Query(None, description="Public key (alternative param name)"),
     start: Optional[str] = Query(None, description="Start date (ISO format)"),
     end: Optional[str] = Query(None, description="End date (ISO format)"),
     limit: int = Query(50, ge=1, le=500, description="Number of results"),
-    skip: int = Query(0, ge=0, description="Number of results to skip")
+    skip: int = Query(0, ge=0, description="Number of results to skip"),
+    _user: dict = Depends(require_auth)
 ):
     """Get leads for a public key with pagination"""
     
