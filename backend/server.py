@@ -915,12 +915,14 @@ async def get_event_types(
 # ============================================
 
 import secrets
+from urllib.parse import urlparse
 
 # Site models
 class SiteCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     domain: Optional[str] = Field(None, max_length=253)
     notification_emails: Optional[List[str]] = Field(default_factory=list)
+    allowed_domains: Optional[List[str]] = Field(default_factory=list)
 
 
 class SiteUpdate(BaseModel):
@@ -928,6 +930,7 @@ class SiteUpdate(BaseModel):
     domain: Optional[str] = Field(None, max_length=253)
     is_active: Optional[bool] = None
     notification_emails: Optional[List[str]] = None
+    allowed_domains: Optional[List[str]] = None
 
 
 def generate_public_key() -> str:
@@ -941,6 +944,100 @@ def validate_domain(domain: str) -> bool:
         return True
     pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'
     return bool(re.match(pattern, domain))
+
+
+def normalize_domain(domain_or_url: str) -> Optional[str]:
+    """
+    Normalize a domain or URL to a clean domain string.
+    - Strips protocol and port
+    - Removes www. prefix
+    - Lowercases
+    Example: https://www.Example.com:443/page → example.com
+    """
+    if not domain_or_url:
+        return None
+    
+    domain_or_url = domain_or_url.strip().lower()
+    
+    # If it looks like a URL, parse it
+    if '://' in domain_or_url:
+        try:
+            parsed = urlparse(domain_or_url)
+            domain = parsed.netloc or parsed.path
+        except Exception:
+            domain = domain_or_url
+    else:
+        domain = domain_or_url
+    
+    # Remove port if present
+    if ':' in domain:
+        domain = domain.split(':')[0]
+    
+    # Remove www. prefix
+    if domain.startswith('www.'):
+        domain = domain[4:]
+    
+    return domain if domain else None
+
+
+def extract_request_domain(request: Request, payload_url: Optional[str] = None) -> Optional[str]:
+    """
+    Extract the source domain from request headers or payload.
+    Priority: Origin > Referer > payload URL
+    """
+    # Try Origin header first (most reliable for CORS requests)
+    origin = request.headers.get("origin")
+    if origin:
+        return normalize_domain(origin)
+    
+    # Try Referer header
+    referer = request.headers.get("referer")
+    if referer:
+        return normalize_domain(referer)
+    
+    # Fallback to URL in payload
+    if payload_url:
+        return normalize_domain(payload_url)
+    
+    return None
+
+
+def get_site_allowlist(site: dict) -> List[str]:
+    """
+    Get the effective allowlist for a site.
+    - If allowed_domains is set, use it
+    - Otherwise, if domain is set, use [domain]
+    - Otherwise, return empty list (no enforcement)
+    """
+    allowed = site.get("allowed_domains", [])
+    if allowed:
+        return [normalize_domain(d) for d in allowed if d]
+    
+    # Fallback to single domain if set
+    domain = site.get("domain")
+    if domain:
+        return [normalize_domain(domain)]
+    
+    return []
+
+
+def check_domain_status(source_domain: Optional[str], allowlist: List[str]) -> str:
+    """
+    Check if source_domain is in the allowlist.
+    Returns: 'verified', 'mismatch', or 'unknown'
+    """
+    if not allowlist:
+        return "unknown"  # No allowlist configured
+    
+    if not source_domain:
+        return "unknown"  # Cannot determine source domain
+    
+    # Normalize and check
+    source_normalized = normalize_domain(source_domain)
+    if source_normalized in allowlist:
+        return "verified"
+    
+    return "mismatch"
 
 
 def serialize_site(doc: dict) -> dict:
