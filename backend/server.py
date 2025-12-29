@@ -943,12 +943,12 @@ async def verify_otp(otp_verify: OTPVerify, request: Request, background_tasks: 
     # Normalize phone
     normalized_phone = normalize_phone_for_otp(otp_verify.phone)
     
-    # Find latest pending OTP for this phone+key
+    # Find latest pending/sent OTP for this phone+key (both statuses are valid for verification)
     now = datetime.now(timezone.utc)
     otp_record = await db.otp_verifications.find_one({
         "public_key": otp_verify.public_key,
         "phone": normalized_phone,
-        "status": "pending",
+        "status": {"$in": ["pending", "sent"]},
         "expires_at": {"$gt": now.isoformat()}
     }, sort=[("created_at", -1)])
     
