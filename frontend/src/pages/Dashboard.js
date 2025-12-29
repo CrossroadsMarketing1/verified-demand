@@ -209,6 +209,7 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Verified</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Domain</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -220,7 +221,7 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
                 {displayLeads.map((lead, idx) => (
                   <tr 
                     key={lead._id || idx} 
-                    className={`hover:bg-gray-50 ${lead.is_suspected_spam ? 'bg-red-50' : lead.is_invalid_contact ? 'bg-yellow-50' : lead.domain_status === 'mismatch' ? 'bg-orange-50' : ''}`}
+                    className={`hover:bg-gray-50 ${lead.is_verified ? 'bg-green-50/30' : ''} ${lead.is_suspected_spam ? 'bg-red-50' : lead.is_invalid_contact ? 'bg-yellow-50' : lead.domain_status === 'mismatch' ? 'bg-orange-50' : ''}`}
                   >
                     <td className="px-3 py-3 text-sm text-gray-900 whitespace-nowrap">
                       {lead.created_at ? new Date(lead.created_at).toLocaleString() : "-"}
@@ -235,6 +236,9 @@ const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlag
                       <span className={!lead.phone_valid && lead.phone_valid !== undefined ? 'text-red-600' : ''}>
                         {lead.phone || "-"}
                       </span>
+                    </td>
+                    <td className="px-3 py-3 text-sm">
+                      <VerifiedBadge lead={lead} />
                     </td>
                     <td className="px-3 py-3 text-sm text-gray-900">
                       <span title={JSON.stringify(lead.vehicle, null, 2)}>
