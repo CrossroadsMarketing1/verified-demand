@@ -87,6 +87,29 @@ const LeadFlags = ({ lead }) => {
   return <div className="flex flex-col gap-1">{flags}</div>;
 };
 
+// Phone verified badge component
+const VerifiedBadge = ({ lead }) => {
+  if (lead.is_verified) {
+    const verifiedAt = lead.verified_at ? new Date(lead.verified_at).toLocaleString() : 'N/A';
+    return (
+      <span 
+        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800" 
+        title={`Phone verified via ${lead.verification_method || 'SMS OTP'} at ${verifiedAt}`}
+      >
+        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        </svg>
+        Verified
+      </span>
+    );
+  }
+  return (
+    <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-500">
+      Unverified
+    </span>
+  );
+};
+
 // Domain status badge component
 const DomainStatusBadge = ({ status, domain }) => {
   if (status === 'verified') {
@@ -111,7 +134,7 @@ const DomainStatusBadge = ({ status, domain }) => {
 };
 
 // Leads Table Component
-const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlagged, onToggleHideFlagged, hideDomainMismatch, onToggleHideDomainMismatch }) => {
+const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlagged, onToggleHideFlagged, hideDomainMismatch, onToggleHideDomainMismatch, showOnlyVerified, onToggleShowOnlyVerified }) => {
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Loading leads...</div>;
   }
