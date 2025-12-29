@@ -672,6 +672,92 @@ const SiteDetail = ({ site, onClose, onUpdate, isAdmin = false }) => {
         </div>
       )}
       
+      {/* User Assignment Section - Admin Only */}
+      {isAdmin && (
+        <div className="border-t border-gray-200 pt-4 mt-4">
+          <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            👥 Assigned Users
+            <span className="text-xs font-normal text-gray-500">(who can access this site)</span>
+          </h4>
+          
+          <div className="space-y-3">
+            {loadingUsers ? (
+              <div className="text-sm text-gray-500">Loading users...</div>
+            ) : allUsers.length === 0 ? (
+              <div className="text-sm text-gray-500 italic">
+                No users available to assign. Create users in the Users management page.
+              </div>
+            ) : (
+              <>
+                {/* User checkboxes */}
+                <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                  {allUsers.map((user) => (
+                    <label 
+                      key={user.id}
+                      className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={assignedUserIds.includes(user.id)}
+                        onChange={() => toggleUserAssignment(user.id)}
+                        className="rounded text-blue-600 focus:ring-blue-500"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm text-gray-900">{user.email}</span>
+                        <span className={`ml-2 px-1.5 py-0.5 text-xs rounded ${
+                          user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {user.role}
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                
+                {/* Action buttons */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSaveAssignments}
+                    disabled={savingAssignments}
+                    className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    data-testid="save-assignments-btn"
+                  >
+                    {savingAssignments ? "Saving..." : "Save Assignments"}
+                  </button>
+                  <button
+                    onClick={() => setAssignedUserIds(allUsers.map(u => u.id))}
+                    className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={() => setAssignedUserIds([])}
+                    className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded"
+                  >
+                    Clear
+                  </button>
+                  <span className="text-xs text-gray-500 ml-auto">
+                    {assignedUserIds.length} user{assignedUserIds.length !== 1 ? 's' : ''} selected
+                  </span>
+                </div>
+                
+                {/* Status message */}
+                {assignmentStatus && (
+                  <div className={`p-2 rounded-md text-sm ${
+                    assignmentStatus.type === "success" 
+                      ? "bg-green-50 border border-green-200 text-green-700"
+                      : "bg-red-50 border border-red-200 text-red-700"
+                  }`}>
+                    {assignmentStatus.type === "success" ? "✅ " : "❌ "}
+                    {assignmentStatus.message}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
       <div className="flex items-center gap-3">
         <label className="text-sm font-medium text-gray-700">Status:</label>
         {isAdmin ? (
