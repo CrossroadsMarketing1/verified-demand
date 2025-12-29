@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Query
+from fastapi import FastAPI, APIRouter, Query, BackgroundTasks
 from fastapi.responses import Response, PlainTextResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -10,6 +10,10 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Any
 import uuid
 from datetime import datetime, timezone, timedelta
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import asyncio
 
 
 ROOT_DIR = Path(__file__).parent
@@ -19,6 +23,24 @@ load_dotenv(ROOT_DIR / '.env')
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+# SMTP Configuration
+SMTP_CONFIG = {
+    "host": os.environ.get("SMTP_HOST"),
+    "port": int(os.environ.get("SMTP_PORT", 587)),
+    "user": os.environ.get("SMTP_USER"),
+    "password": os.environ.get("SMTP_PASS"),
+    "from_email": os.environ.get("SMTP_FROM")
+}
+
+def is_smtp_configured() -> bool:
+    """Check if SMTP is properly configured"""
+    return all([
+        SMTP_CONFIG["host"],
+        SMTP_CONFIG["user"],
+        SMTP_CONFIG["password"],
+        SMTP_CONFIG["from_email"]
+    ])
 
 # Create the main app without a prefix
 app = FastAPI()
