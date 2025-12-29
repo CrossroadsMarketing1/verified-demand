@@ -60,74 +60,141 @@ const formatVehicle = (vehicle) => {
   return "(vehicle data)";
 };
 
+// Lead flags badge component
+const LeadFlags = ({ lead }) => {
+  const flags = [];
+  
+  if (lead.is_suspected_spam) {
+    flags.push(
+      <span key="spam" className="px-1.5 py-0.5 text-xs rounded bg-red-100 text-red-700" title="Suspected spam (honeypot triggered)">
+        🚫 Spam
+      </span>
+    );
+  }
+  
+  if (lead.is_invalid_contact) {
+    flags.push(
+      <span key="invalid" className="px-1.5 py-0.5 text-xs rounded bg-yellow-100 text-yellow-700" title={`Email valid: ${lead.email_valid}, Phone valid: ${lead.phone_valid}`}>
+        ⚠️ Invalid
+      </span>
+    );
+  }
+  
+  if (flags.length === 0) {
+    return <span className="text-gray-400 text-xs">-</span>;
+  }
+  
+  return <div className="flex flex-col gap-1">{flags}</div>;
+};
+
 // Leads Table Component
-const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange }) => {
+const LeadsTable = ({ leads, loading, total, skip, limit, onPageChange, hideFlagged, onToggleHideFlagged }) => {
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Loading leads...</div>;
   }
   
-  if (!leads.length) {
-    return <div className="text-center py-8 text-gray-500">No leads found</div>;
-  }
+  // Filter leads if hideFlagged is enabled
+  const displayLeads = hideFlagged 
+    ? leads.filter(lead => !lead.is_suspected_spam && !lead.is_invalid_contact)
+    : leads;
   
   return (
     <div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date/Time</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {leads.map((lead, idx) => (
-              <tr key={lead._id || idx} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                  {lead.created_at ? new Date(lead.created_at).toLocaleString() : "-"}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-900">{lead.name || "-"}</td>
-                <td className="px-4 py-3 text-sm text-gray-900">{lead.email || "-"}</td>
-                <td className="px-4 py-3 text-sm text-gray-900">{lead.phone || "-"}</td>
-                <td className="px-4 py-3 text-sm text-gray-900">
-                  <span title={JSON.stringify(lead.vehicle, null, 2)}>
-                    {formatVehicle(lead.vehicle)}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm">
-                  {lead.source_url ? (
-                    <a
-                      href={lead.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 truncate block max-w-xs"
-                      title={lead.source_url}
-                    >
-                      {new URL(lead.source_url).pathname || "/"}
-                    </a>
-                  ) : "-"}
-                </td>
-                <td className="px-4 py-3 text-sm">
-                  <ExpandableJSON data={lead} label="View" />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Filter toggle */}
+      <div className="mb-4 flex items-center gap-2">
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={hideFlagged}
+            onChange={() => onToggleHideFlagged(!hideFlagged)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          Hide flagged leads (spam/invalid)
+        </label>
+        {hideFlagged && leads.length !== displayLeads.length && (
+          <span className="text-xs text-gray-500">
+            ({leads.length - displayLeads.length} hidden)
+          </span>
+        )}
       </div>
       
-      {/* Pagination */}
-      <div className="flex items-center justify-between mt-4 px-4">
-        <span className="text-sm text-gray-700">
-          Showing {skip + 1} - {Math.min(skip + leads.length, total)} of {total}
-        </span>
-        <div className="flex gap-2">
-          <button
+      {!displayLeads.length ? (
+        <div className="text-center py-8 text-gray-500">
+          {hideFlagged && leads.length > 0 ? "All leads are flagged. Uncheck filter to view." : "No leads found"}
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date/Time</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Flags</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {displayLeads.map((lead, idx) => (
+                  <tr 
+                    key={lead._id || idx} 
+                    className={`hover:bg-gray-50 ${lead.is_suspected_spam ? 'bg-red-50' : lead.is_invalid_contact ? 'bg-yellow-50' : ''}`}
+                  >
+                    <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                      {lead.created_at ? new Date(lead.created_at).toLocaleString() : "-"}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{lead.name || "-"}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      <span className={!lead.email_valid && lead.email_valid !== undefined ? 'text-red-600' : ''}>
+                        {lead.email || "-"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      <span className={!lead.phone_valid && lead.phone_valid !== undefined ? 'text-red-600' : ''}>
+                        {lead.phone || "-"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      <span title={JSON.stringify(lead.vehicle, null, 2)}>
+                        {formatVehicle(lead.vehicle)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <LeadFlags lead={lead} />
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {lead.source_url ? (
+                        <a
+                          href={lead.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 truncate block max-w-xs"
+                          title={lead.source_url}
+                        >
+                          {(() => { try { return new URL(lead.source_url).pathname || "/"; } catch { return lead.source_url; } })()}
+                        </a>
+                      ) : "-"}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <ExpandableJSON data={lead} label="View" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Pagination */}
+          <div className="flex items-center justify-between mt-4 px-4">
+            <span className="text-sm text-gray-700">
+              Showing {skip + 1} - {Math.min(skip + leads.length, total)} of {total}
+            </span>
+            <div className="flex gap-2">
+              <button
             onClick={() => onPageChange(Math.max(0, skip - limit))}
             disabled={skip === 0}
             className="px-3 py-1 text-sm border rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
