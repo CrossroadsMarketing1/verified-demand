@@ -1349,6 +1349,8 @@ EMBED_JS = '''
           '<input type="text" name="name" placeholder="Full Name" required style="width:100%;padding:12px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
           '<input type="email" name="email" placeholder="Email Address" required style="width:100%;padding:12px;margin-bottom:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
           '<input type="tel" name="phone" placeholder="Phone Number" required style="width:100%;padding:12px;margin-bottom:16px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;" />' +
+          '<input type="text" name="company" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />' +
+          '<input type="text" name="website" autocomplete="off" tabindex="-1" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />' +
           '<button type="submit" style="width:100%;padding:14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">Unlock Price</button>' +
         '</form>' +
       '</div>';
@@ -1367,7 +1369,9 @@ EMBED_JS = '''
         phone: formData.get("phone"),
         vehicle: currentVehicleData,
         url: window.location.href,
-        referrer: document.referrer
+        referrer: document.referrer,
+        company: formData.get("company") || "",
+        website: formData.get("website") || ""
       };
       
       // Submit lead to dedicated endpoint
@@ -1381,6 +1385,8 @@ EMBED_JS = '''
             if (xhr.status === 200) {
               console.log("[VerifiedDemand] Lead submitted successfully");
               log("Lead submitted successfully");
+            } else if (xhr.status === 429) {
+              console.warn("[VerifiedDemand] Rate limited - too many requests");
             } else {
               console.error("[VerifiedDemand] Lead submission failed:", xhr.status, xhr.responseText);
             }
