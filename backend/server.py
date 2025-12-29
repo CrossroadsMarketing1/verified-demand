@@ -2259,8 +2259,23 @@ async def create_site(site: SiteCreate, request: Request, _user: dict = Depends(
 
 @api_router.get("/dashboard/sites")
 async def list_sites(request: Request, _user: dict = Depends(require_auth)):
-    """List all sites, newest first"""
-    cursor = db.sites.find({}).sort([("created_at", -1), ("_id", -1)])
+    """List sites - Admin sees all, users see only assigned sites"""
+    
+    # Build query based on user role
+    if _user.get("role") == "admin":
+        # Admin can see all sites
+        query = {}
+    else:
+        # Non-admin users only see sites they own or are assigned to
+        user_id = _user.get("id")
+        query = {
+            "$or": [
+                {"owner_user_id": user_id},
+                {"allowed_user_ids": user_id}
+            ]
+        }
+    
+    cursor = db.sites.find(query).sort([("created_at", -1), ("_id", -1)])
     sites = await cursor.to_list(length=1000)
     return {"sites": [serialize_site(s) for s in sites]}
 
@@ -2279,12 +2294,18 @@ async def get_site(public_key: str, request: Request, _user: dict = Depends(requ
     if not site:
         return {"error": "Site not found"}
     
+    # Check access for non-admin users
+    if _user.get("role") != "admin":
+        can_access = await user_can_access_site(_user, site.get("public_key"))
+        if not can_access:
+            raise HTTPException(status_code=403, detail="Access denied to this site")
+    
     return serialize_site(site)
 
 
 @api_router.patch("/dashboard/sites/{public_key}")
-async def update_site(public_key: str, update: SiteUpdate, request: Request, _user: dict = Depends(require_auth)):
-    """Update a site's settings"""
+async def update_site(public_key: str, update: SiteUpdate, request: Request, _user: dict = Depends(require_admin)):
+    """Update a site's settings (Admin only)"""
     
     # Validate domain if provided
     if update.domain is not None and update.domain and not validate_domain(update.domain):
