@@ -4164,7 +4164,16 @@ CORS_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     os.environ.get("FRONTEND_URL", "http://localhost:3000"),
+    # Production domains
+    "https://app.verifieddemand.com",
+    "https://verifieddemand.com",
+    "https://www.verifieddemand.com",
 ]
+
+# Also allow any additional origins from env (comma-separated)
+extra_origins = os.environ.get("CORS_EXTRA_ORIGINS", "")
+if extra_origins:
+    CORS_ORIGINS.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
 
 app.add_middleware(
     CORSMiddleware,
